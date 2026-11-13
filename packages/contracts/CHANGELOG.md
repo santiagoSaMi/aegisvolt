@@ -2,6 +2,20 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — energy-dispatch 1.1.0
+
+Cambios al implementar energy-dispatch-service (ADR-0023):
+
+- **Nuevo:**
+  - `POST /v1/sessions/{id}/stop` (`stopSessionRequestSchema`, `stopSessionResponseSchema`, `STOP_REASONS`);
+  - `POST /v1/sessions/{id}/telemetry` (`recordTelemetryRequestSchema`);
+  - `GET /v1/stations/{stationId}/sessions` (`listStationSessionsQuerySchema`, `listSessionsResponseSchema`);
+  - `GET /v1/stations/{stationId}/connectors/{connectorId}/charger` (`chargerStatusViewSchema`, `CHARGER_STATES`);
+  - `paths.stopSession`, `paths.stationSessions` y `paths.chargerStatus`;
+  - errores `SESSION_NOT_ACTIVE`, `CONNECTOR_BUSY`, `TELEMETRY_OUT_OF_ORDER` (409) y `CHARGER_UNAVAILABLE` (503, fallo técnico distinto de la falla física 422).
+- **Campos opcionales añadidos:** `sessionViewSchema.stopReason`, `energyDeliveredKwh`, `lastTelemetryAt`, `transitions`; `chargerFaultProblemSchema.sessionId`.
+- **Corrección *pre-release*** (aceptada porque la v1 aún no tiene consumidores implementados de la telemetría): `telemetryRecordViewSchema` usa los campos mínimos del enunciado: `recordedAt` → `timestamp`, `energyDeliveredKwh` → `energyKwh`, nuevo `currentA` obligatorio, `temperatureC` opcional.
+
 ## 2026-11-13 — billing-wallet 1.1.0
 
 Cambios al implementar billing-wallet-service (ADR-0022). Todos compatibles (*minor*):

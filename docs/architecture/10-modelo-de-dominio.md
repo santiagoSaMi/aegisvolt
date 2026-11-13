@@ -78,21 +78,22 @@ stateDiagram-v2
 
 | Tipo | Elemento | Invariantes / reglas |
 | --- | --- | --- |
-| Agregado | **ChargingSession** | `FAILED` ⇔ tiene `fault`. Estados terminales ⇔ tiene `endedAt`. Solo `ACTIVE` acepta telemetría y puede completarse. Una carga `COMPLETED` no puede abortarse (`SESSION_ALREADY_COMPLETED`). |
-| Entidad | **TelemetryRecord** | Rangos físicos (0–1000 kW, 0–500 kWh, 0–1500 V, −40–120 °C). Respecto de la lectura anterior: tiempo estrictamente creciente y energía no decreciente. No anterior al inicio de la sesión ni mayor que la energía solicitada. |
+| Agregado | **ChargingSession** | `FAILED` ⇔ tiene `fault`. Estados terminales ⇔ tiene `endedAt`. `COMPLETED` ⇔ tiene `stopReason`. Cada cambio de estado se añade a `transitions` (`from`, `to`, `at`, `reason`) y la última transición lleva al estado actual. Solo `ACTIVE` acepta telemetría y puede pararse (`stop`, idempotente: `ALREADY_STOPPED`). Una carga `COMPLETED` no puede abortarse (`SESSION_ALREADY_COMPLETED`). Guarda la última lectura (`lastTelemetry`) para validar el orden. |
+| Entidad | **TelemetryRecord** | Campos `timestamp`, `voltageV`, `currentA`, `powerKw`, `energyKwh` (acumulada) y `temperatureC` opcional. Rangos físicos (0–1500 V, 0–1000 A, 0–1000 kW, 0–500 kWh, −40–120 °C) y coherencia `P ≈ V × I / 1000` (±10 %, mínimo 1 kW). Respecto de la lectura anterior: tiempo estrictamente creciente y energía no decreciente. No anterior al inicio de la sesión ni mayor que la energía solicitada. |
 | Entidad | SessionTombstone | Bloquea una activación tardía de una sesión ya abortada. |
 | Value Objects | `RequestedEnergy` (Wh), `ChargerFault` (`E-XX-000`, `simulated`) | |
 | Servicios | `startSession` (con el resultado del cargador: `ACTIVATED` o `FAULT`), `ensureCanStart`, `abortSession` | |
-| Errores | `SESSION_ABORTED`, `SESSION_ALREADY_COMPLETED`, `SESSION_NOT_ACTIVE`, `IDEMPOTENCY_CONFLICT`, `TELEMETRY_OUT_OF_ORDER`, `INVALID_VALUE` | |
+| Errores | `SESSION_ABORTED`, `SESSION_ALREADY_COMPLETED`, `SESSION_NOT_ACTIVE`, `IDEMPOTENCY_CONFLICT` (términos o lectura distintos), `CONNECTOR_BUSY`, `TELEMETRY_OUT_OF_ORDER`, `INVALID_VALUE` | |
 
-La flag `SIMULATE_CHARGER_HARDWARE_FAULT` **no** está en el dominio. La evaluará el adaptador `SimulatedChargerGateway`, que devolverá `{ kind: 'FAULT', fault: ChargerFault.simulatedHardwareFault() }`. El dominio solo registra el resultado.
+La flag `SIMULATE_CHARGER_HARDWARE_FAULT` **no** está en el dominio. La evalúa el adaptador `SimulatedChargerAdapter` ([ADR-0023](../adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)), que devuelve `{ kind: 'FAULT', fault: ChargerFault.simulatedHardwareFault() }`. El dominio solo registra el resultado.
 
 ```mermaid
 stateDiagram-v2
   direction LR
   [*] --> ACTIVE: cargador activado
   [*] --> FAILED: falla del cargador
-  ACTIVE --> COMPLETED: complete
+  ACTIVE --> COMPLETED: stop (motivo)
+  COMPLETED --> COMPLETED: stop = ALREADY_STOPPED
   ACTIVE --> ABORTED: abort (compensación)
   FAILED --> FAILED: abort = ALREADY_FAILED
   ABORTED --> ABORTED: abort = ALREADY_ABORTED

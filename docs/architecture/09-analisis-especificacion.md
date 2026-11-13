@@ -34,7 +34,7 @@ Estados:
 | P-14 | §2.2 `ENABLE_FAST_CHARGE_BOOST`: "reserva prioritaria de ultra-carga" | Semántica no definida: ¿prioridad sobre quién? ¿qué se bloquea si está apagada? | Ambigüedad | Si está activa, las reservas `fastChargeBoost` pueden tomar conectores `ultraFast` con *hold* extendido; si no, responden `403 FAST_CHARGE_BOOST_DISABLED`. | Requiere confirmación (profesor) |
 | P-15 | §2.2 `SIMULATE_CHARGER_HARDWARE_FAULT` en todos los ambientes | Un interruptor de inyección de fallos en `prod` es un riesgo operativo. | Riesgo | Existe en `prod` (lo exige el aislamiento por ambiente) con valor `false`, solo administrable por `platform-admins` y con auditoría. La demo de §6.3 usa `test`. | Resuelto (ADR-0007) |
 | P-17 | §2.2 "mínimo tres microservicios"; diagrama con 3 servicios | No define dónde vive el orquestador. Ponerlo en los resolvers violaría "sin lógica de negocio en resolvers" (CLAUDE.md). | Ambigüedad | Cuarto servicio `saga-orchestrator-service`, compatible con "mínimo tres". | Resuelto ([ADR-0002](../adr/0002-bounded-contexts-y-orquestador-dedicado.md)) |
-| P-27 | §1.2 "telemetría en tiempo real" | No hay hardware real. | Limitación | Telemetría simulada por el adaptador `SimulatedChargerGateway`. | Resuelto |
+| P-27 | §1.2 "telemetría en tiempo real" | No hay hardware real. | Limitación | Telemetría simulada por el adaptador `SimulatedChargerAdapter`. | Resuelto |
 
 ## Observabilidad y datos
 

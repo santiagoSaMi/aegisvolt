@@ -6,7 +6,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 | --- | --- | --- | --- | --- |
 | station-reservation | `stationReservationV1` | 1.1.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
 | billing-wallet | `billingWalletV1` | 1.1.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
-| energy-dispatch | `energyDispatchV1` | 1.0.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones y telemetría) |
+| energy-dispatch | `energyDispatchV1` | 1.1.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones, parada, cargadores y telemetría) |
 | saga-orchestrator | `sagaOrchestratorV1` | 1.0.0 | saga-orchestrator-service | graphql-api |
 | feature-flags (datos, no HTTP) | `featureFlagsV1` | 1.0.0 | graphql-api (único escritor) | los tres servicios (lectura) |
 
@@ -120,12 +120,18 @@ Versión 1.1.0, implementada en [billing-wallet-service](../../services/billing-
 
 | Operación | Petición | Respuesta | Errores de negocio |
 | --- | --- | --- | --- |
-| `PUT /v1/sessions/{sessionId}` (SAGA paso 3, pivote) | `activateSessionRequestSchema` `{sagaId, stationId, connectorId, energyKwh}` | `sessionViewSchema` (ACTIVE) | `422 CHARGER_HARDWARE_FAULT` (`chargerFaultProblemSchema`: `faultCode`, `simulated`), `409 SESSION_ABORTED`, `409 IDEMPOTENCY_CONFLICT` |
+| `PUT /v1/sessions/{sessionId}` (SAGA paso 3, pivote) | `activateSessionRequestSchema` `{sagaId, stationId, connectorId, energyKwh}` | `201`/`200` `sessionViewSchema` (ACTIVE) | `422 CHARGER_HARDWARE_FAULT` (`chargerFaultProblemSchema`: `faultCode`, `simulated`, `sessionId`), `503 CHARGER_UNAVAILABLE` (fallo técnico, reintentable), `409 SESSION_ABORTED`, `409 IDEMPOTENCY_CONFLICT`, `409 CONNECTOR_BUSY` |
 | `GET /v1/sessions/{sessionId}` | — | `sessionViewSchema` | `404 SESSION_NOT_FOUND` |
 | `POST /v1/sessions/{id}/abort` (compensación) | `{reason}` | `{sessionId, status, outcome: ABORTED \| ALREADY_ABORTED \| ALREADY_FAILED \| VOIDED}` | `409 SESSION_ALREADY_COMPLETED` |
-| `GET /v1/sessions/{id}/telemetry?limit=` | `listTelemetryQuerySchema` | `{items[]}` (`powerKw`, `energyDeliveredKwh`, `voltageV`, `temperatureC`) | `404 SESSION_NOT_FOUND` |
+| `POST /v1/sessions/{id}/stop` | `stopSessionRequestSchema` `{reason = USER_REQUEST}` | `{sessionId, status, outcome: STOPPED \| ALREADY_STOPPED}` | `404 SESSION_NOT_FOUND`, `409 SESSION_NOT_ACTIVE`, `503 CHARGER_UNAVAILABLE` |
+| `POST /v1/sessions/{id}/telemetry` | `recordTelemetryRequestSchema` `{timestamp, voltageV, currentA, powerKw, energyKwh, temperatureC?}` | `201` nueva · `200` repetida | `400` (rangos o `powerKw` incoherente con V × I), `409 SESSION_NOT_ACTIVE`, `409 TELEMETRY_OUT_OF_ORDER`, `409 IDEMPOTENCY_CONFLICT` |
+| `GET /v1/sessions/{id}/telemetry?limit=` | `listTelemetryQuerySchema` | `{items[]}` (`telemetryRecordViewSchema`, más reciente primero) | `404 SESSION_NOT_FOUND` |
+| `GET /v1/stations/{stationId}/sessions?active=&limit=&cursor=` | `listStationSessionsQuerySchema` | `{items[], nextCursor?}` | `400` cursor inválido |
+| `GET /v1/stations/{stationId}/connectors/{connectorId}/charger` | — | `chargerStatusViewSchema` (`CHARGING \| IDLE \| FAULTED`, `activeSessionId?`, `fault?`) | `503 CHARGER_UNAVAILABLE` |
 
-Estados: `ACTIVE | FAILED | ABORTED | COMPLETED | VOIDED`. Si la activación hace *timeout*, el orquestador consulta `GET /v1/sessions/{id}` antes de compensar.
+Versión 1.1.0, implementada en [energy-dispatch-service](../../services/energy-dispatch/README.md). `sessionViewSchema` añade `stopReason`, `energyDeliveredKwh`, `lastTelemetryAt` y `transitions` (opcionales).
+
+Estados: `ACTIVE | FAILED | ABORTED | COMPLETED | VOIDED`. Si la activación hace *timeout* o devuelve `503`, el orquestador consulta `GET /v1/sessions/{id}` antes de compensar: `422` es una falla física definitiva; `503` es un fallo técnico de resultado desconocido.
 
 ## saga-orchestrator v1
 

@@ -24,7 +24,7 @@ Cubre el punto 18. Decisión: [ADR-0016](../adr/0016-estrategia-de-pruebas.md). 
 - **Política de reintentos:** reintenta solo ante errores transitorios; nunca ante `409`/`422`; backoff con jitter determinista (`Random` inyectado).
 - **Billing:** cálculo con y sin *surge* (reloj inyectado en ventana pico y fuera de ella), dinero en unidades menores, saldo insuficiente.
 - **Reservation:** reglas de disponibilidad, vencimiento perezoso del *hold*, `ENABLE_FAST_CHARGE_BOOST`.
-- **Dispatch:** `SimulatedChargerGateway` con la flag encendida y apagada.
+- **Dispatch:** `SimulatedChargerAdapter` con la flag encendida y apagada.
 - **GraphQL:** políticas de autorización (flota del token frente a `input.fleetId`; rol admin).
 
 ### Integración (Floci, tablas con sufijo aleatorio por ejecución)

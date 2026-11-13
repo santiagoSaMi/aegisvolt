@@ -72,7 +72,7 @@ sequenceDiagram
   B-->>O: 201 DEBITED {amountMinor}
   O->>DS: DEBITING→ACTIVATING + evento
   O->>D: PUT /sessions/{sessionId}
-  D->>D: ChargerGateway.activate() (flag de falla = OFF)
+  D->>D: ChargerAdapter.startCharging() (flag de falla = OFF)
   D-->>O: 201 ACTIVE
   O->>R: POST /reservations/{resId}/confirm
   R-->>O: 200 CONFIRMED
@@ -125,7 +125,7 @@ sequenceDiagram
   O->>D: PUT /sessions/{sessionId}
   D->>FF: SIMULATE_CHARGER_HARDWARE_FAULT? (caché ≤ 5 s)
   FF-->>D: true
-  D->>D: SimulatedChargerGateway → fault E-HW-001<br/>sesión FAILED (simulatedFault=true)
+  D->>D: SimulatedChargerAdapter → fault E-HW-001<br/>sesión FAILED (simulatedFault=true)
   D-->>O: 422 CHARGER_HARDWARE_FAULT
   O->>DS: ACTIVATING→COMPENSATING (failureReason=CHARGER_HARDWARE_FAULT)
   O->>D: POST /sessions/{sessionId}/abort

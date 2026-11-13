@@ -10,6 +10,10 @@ import {
 
 const UUID = '3f2c1e5a-1b2c-4d3e-8f90-123456789abc';
 const NOW = '2026-11-13T15:04:05.000Z';
+/** Copia del objeto sin las claves indicadas (para probar campos ausentes). */
+const without = (value: Record<string, unknown>, ...omitted: string[]) =>
+  Object.fromEntries(Object.entries(value).filter(([key]) => !omitted.includes(key)));
+
 const ids = {
   sagaId: `saga_${UUID}`,
   fleetId: 'fleet_001',
@@ -233,20 +237,49 @@ describe('energy-dispatch v1', () => {
     );
   });
 
-  it('telemetría: rangos físicos plausibles', () => {
+  it('telemetría: campos mínimos y rangos físicos plausibles', () => {
     const record = {
       sessionId: ids.sessionId,
-      recordedAt: NOW,
-      powerKw: 148.2,
-      energyDeliveredKwh: 12.4,
+      timestamp: NOW,
       voltageV: 780,
+      currentA: 190,
+      powerKw: 148.2,
+      energyKwh: 12.4,
       temperatureC: 41.5,
     };
     expect(api.telemetryRecordViewSchema.safeParse(record).success).toBe(true);
     expect(api.telemetryRecordViewSchema.safeParse({ ...record, temperatureC: 300 }).success).toBe(
       false,
     );
+    const reading = without(record, 'sessionId', 'temperatureC');
+    expect(api.recordTelemetryRequestSchema.safeParse(reading).success).toBe(true);
+    for (const field of ['timestamp', 'voltageV', 'currentA', 'powerKw', 'energyKwh'] as const) {
+      expect(api.recordTelemetryRequestSchema.safeParse(without(reading, field)).success).toBe(
+        false,
+      );
+    }
+    // La sesión va en la ruta, no en el cuerpo.
+    expect(
+      api.recordTelemetryRequestSchema.safeParse({ ...reading, sessionId: ids.sessionId }).success,
+    ).toBe(false);
     expect(api.listTelemetryQuerySchema.parse({})).toEqual({ limit: 50 });
+  });
+
+  it('parada: motivo por defecto USER_REQUEST; sesiones activas por estación', () => {
+    expect(api.stopSessionRequestSchema.parse({})).toEqual({ reason: 'USER_REQUEST' });
+    expect(api.stopSessionRequestSchema.safeParse({ reason: 'BOOM' }).success).toBe(false);
+    expect(api.listStationSessionsQuerySchema.parse({ active: 'true' })).toEqual({
+      active: true,
+      limit: 20,
+    });
+  });
+
+  it('distingue la falla física (422) del fallo técnico del cargador (503)', () => {
+    expect(api.ERROR_CODES.CHARGER_HARDWARE_FAULT).toBe(422);
+    expect(api.ERROR_CODES.CHARGER_UNAVAILABLE).toBe(503);
+    expect(api.paths.chargerStatus(ids.stationId, ids.connectorId)).toBe(
+      `/v1/stations/${ids.stationId}/connectors/${ids.connectorId}/charger`,
+    );
   });
 });
 

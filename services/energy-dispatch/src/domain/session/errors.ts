@@ -24,3 +24,13 @@ export class SessionTermsMismatchError extends DomainError {
 export class TelemetryOutOfOrderError extends DomainError {
   readonly code = 'TELEMETRY_OUT_OF_ORDER';
 }
+
+/** El conector ya tiene otra sesión activa: no puede haber dos cargas simultáneas. */
+export class ConnectorBusyError extends DomainError {
+  readonly code = 'CONNECTOR_BUSY';
+}
+
+/** Ya hay una lectura con el mismo `timestamp` y valores distintos (idempotencia). */
+export class TelemetryConflictError extends DomainError {
+  readonly code = 'IDEMPOTENCY_CONFLICT';
+}

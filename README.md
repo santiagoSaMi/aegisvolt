@@ -12,6 +12,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
 | station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
 | billing-wallet-service | Implementado con libro mayor atómico, reembolsos como operación propia y pruebas de integración en Floci ([README](services/billing-wallet/README.md), [ADR-0022](docs/adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md)) |
+| energy-dispatch-service | Implementado con puerto `ChargerAdapter`, cargador simulado, falla inducida por flag desde la tabla de flags del ambiente, telemetría y pruebas de integración en Floci ([README](services/energy-dispatch/README.md), [ADR-0023](docs/adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)) |
 
 ## Requisitos
 
@@ -75,10 +76,11 @@ Si modificas un paquete de `packages/*` y lo consume una app en modo `dev`, reco
 | `packages/contracts` | `@aegisvolt/contracts` | — | Cabeceras HTTP, `problem+json`, OpenAPI |
 | `packages/logger` | `@aegisvolt/logger` | — | Logger JSON con `correlation_id`/`saga_id` |
 | `packages/config` | `@aegisvolt/config` | — | Configuración validada por entorno |
+| `packages/feature-flags` | `@aegisvolt/feature-flags` | — | Lectura de flags por ambiente desde DynamoDB con caché (ADR-0007) |
 | `prefect/` | — | — | Flujos de observabilidad (Python, fase posterior) |
 | `tests/e2e/` | — | — | Pruebas E2E (fase posterior) |
 | `infra/` | — | — | Floci local, Terraform y Kubernetes |
-| `scripts/` | — | — | Scripts operativos (Floci) |
+| `scripts/` | — | — | Scripts operativos (Floci, `flags/set.sh` para flags locales) |
 | `.github/workflows/` | — | — | CI/CD (fase posterior) |
 
 **Estructura interna de cada servicio** (hexagonal; dependency-cruiser la hace cumplir):

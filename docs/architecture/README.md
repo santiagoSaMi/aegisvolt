@@ -40,7 +40,7 @@ apps/web                              apps/graphql-api
 services/saga-orchestrator            services/station-reservation
 services/billing-wallet               services/energy-dispatch
 packages/contracts (HTTP, OpenAPI)    packages/logger (JSON, correlation_id)   packages/config (env)
-packages/feature-flags (fase posterior, ADR-0007)
+packages/feature-flags (lector de flags, ADR-0007)
 prefect/ (Python)                     tests/e2e
 infra/terraform/{bootstrap,global,live,modules}   infra/k8s/{base,components,overlays}   infra/local/floci
 .github/workflows                     docs/{architecture,adr}   scripts/
@@ -74,5 +74,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md) | Modelos de dominio por bounded context y contratos con Zod | Aceptado |
 | [0021](../adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md) | station-reservation: concurrencia, idempotencia, expiración y presentación | Aceptado |
 | [0022](../adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md) | billing-wallet: libro mayor atómico, idempotencia y reembolso como operación propia | Aceptado |
+| [0023](../adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md) | energy-dispatch: puerto del cargador, falla simulada por flag, telemetría y apagado ordenado | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.
