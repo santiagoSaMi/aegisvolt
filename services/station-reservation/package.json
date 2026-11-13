@@ -21,6 +21,7 @@
   "dependencies": {
     "@aegisvolt/config": "workspace:*",
     "@aegisvolt/contracts": "workspace:*",
+    "@aegisvolt/feature-flags": "workspace:*",
     "@aegisvolt/logger": "workspace:*",
     "@aws-sdk/client-dynamodb": "3.1163.0",
     "@aws-sdk/lib-dynamodb": "3.1163.0",

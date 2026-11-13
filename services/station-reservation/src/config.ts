@@ -5,6 +5,7 @@ import {
   type BaseConfig,
   type EnvSource,
 } from '@aegisvolt/config';
+import { resolveFeatureFlagsTable } from '@aegisvolt/feature-flags';
 import { z } from 'zod';
 
 export const SERVICE_NAME = 'station-reservation-service';
@@ -22,11 +23,13 @@ const serviceEnvSchema = z.object({
   DYNAMODB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
   RESERVATION_STANDARD_HOLD_MS: ms(1_000, 3_600_000, 120_000),
   RESERVATION_BOOSTED_HOLD_MS: ms(1_000, 3_600_000, 300_000),
-  /** Provisional hasta el lector de flags en DynamoDB (ADR-0007). */
-  FEATURE_ENABLE_FAST_CHARGE_BOOST: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
+  /**
+   * Tabla de flags del ambiente (solo lectura, ADR-0007/0025). Opcional: por
+   * defecto `aegisvolt-feature-flags-<APP_ENV>`; en dev/test/prod no admite otra.
+   */
+  FEATURE_FLAGS_TABLE_NAME: z.string().optional(),
+  /** Vigencia de la caché de flags: un cambio se refleja en ≤ este tiempo. */
+  FEATURE_FLAGS_CACHE_TTL_MS: ms(0, 60_000, 5_000),
 });
 
 export interface ServiceConfig extends BaseConfig {
@@ -38,7 +41,7 @@ export interface ServiceConfig extends BaseConfig {
     readonly maxAttempts: number;
   };
   readonly reservationPolicy: { readonly standardHoldMs: number; readonly boostedHoldMs: number };
-  readonly featureFlags: { readonly ENABLE_FAST_CHARGE_BOOST: boolean };
+  readonly featureFlags: { readonly tableName: string; readonly cacheTtlMs: number };
 }
 
 export function loadServiceConfig(env: EnvSource): ServiceConfig {
@@ -64,6 +67,15 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
     ]);
   }
 
+  let featureFlagsTable: string;
+  try {
+    featureFlagsTable = resolveFeatureFlagsTable(base.appEnv, service.FEATURE_FLAGS_TABLE_NAME);
+  } catch (error) {
+    throw new ConfigValidationError([
+      { variable: 'FEATURE_FLAGS_TABLE_NAME', message: (error as Error).message },
+    ]);
+  }
+
   return {
     ...base,
     http: { requestTimeoutMs: service.HTTP_REQUEST_TIMEOUT_MS },
@@ -77,6 +89,9 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
       standardHoldMs: service.RESERVATION_STANDARD_HOLD_MS,
       boostedHoldMs: service.RESERVATION_BOOSTED_HOLD_MS,
     },
-    featureFlags: { ENABLE_FAST_CHARGE_BOOST: service.FEATURE_ENABLE_FAST_CHARGE_BOOST },
+    featureFlags: {
+      tableName: featureFlagsTable,
+      cacheTtlMs: service.FEATURE_FLAGS_CACHE_TTL_MS,
+    },
   };
 }

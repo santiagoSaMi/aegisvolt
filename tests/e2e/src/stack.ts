@@ -279,9 +279,17 @@ export class Stack {
     };
     switch (name) {
       case 'station-reservation':
-        return { ...common, DYNAMODB_TABLE_NAME: this.tables.reservations };
+        return {
+          ...common,
+          DYNAMODB_TABLE_NAME: this.tables.reservations,
+          FEATURE_FLAGS_TABLE_NAME: this.tables.flags,
+        };
       case 'billing-wallet':
-        return { ...common, DYNAMODB_TABLE_NAME: this.tables.billing };
+        return {
+          ...common,
+          DYNAMODB_TABLE_NAME: this.tables.billing,
+          FEATURE_FLAGS_TABLE_NAME: this.tables.flags,
+        };
       case 'energy-dispatch':
         return {
           ...common,

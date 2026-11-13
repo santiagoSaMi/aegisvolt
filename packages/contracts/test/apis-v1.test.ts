@@ -331,6 +331,42 @@ describe('saga-orchestrator v1', () => {
   });
 });
 
+describe('feature-flags v1.1 (operaciones del graphql-api)', () => {
+  it('la petición de cambio solo admite un booleano y la versión esperada (sin ambiente)', () => {
+    const api = featureFlagsV1;
+    expect(api.updateFeatureFlagRequestSchema.safeParse({ enabled: true }).success).toBe(true);
+    expect(
+      api.updateFeatureFlagRequestSchema.safeParse({ enabled: true, environment: 'prod' }).success,
+    ).toBe(false);
+    expect(api.updateFeatureFlagRequestSchema.safeParse({ enabled: 'true' }).success).toBe(false);
+    expect(
+      api.featureFlagStateSchema.safeParse({
+        key: 'ENABLE_FAST_CHARGE_BOOST',
+        enabled: 'sk-secret',
+        version: 1,
+        updatedAt: NOW,
+        updatedBy: 'admin',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('la auditoría registra quién, cuándo, qué y en qué ambiente', () => {
+    expect(
+      featureFlagsV1.featureFlagChangeViewSchema.safeParse({
+        key: 'SIMULATE_CHARGER_HARDWARE_FAULT',
+        from: false,
+        to: true,
+        version: 2,
+        changedBy: 'admin-sub',
+        changedAt: NOW,
+        correlationId: '3f2c1e5a-1b2c-4d3e-8f90-123456789abc',
+        environment: 'dev',
+      }).success,
+    ).toBe(true);
+    expect(featureFlagsV1.ERROR_CODES.FEATURE_FLAG_VERSION_CONFLICT).toBe(409);
+  });
+});
+
 describe('feature-flags v1', () => {
   it('declara las tres flags de la especificación y quién las evalúa', () => {
     expect(featureFlagsV1.FEATURE_FLAG_KEYS).toEqual([

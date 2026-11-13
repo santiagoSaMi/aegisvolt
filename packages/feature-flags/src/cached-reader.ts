@@ -25,6 +25,10 @@ interface CacheEntry {
  * - si el almacén falla, usa el último valor conocido o, si no lo hay, el valor
  *   seguro `false`, y no vuelve a intentarlo hasta que venza el TTL (evita
  *   martillear una dependencia caída).
+ *
+ * Actualización: por expiración (TTL corto) en todas las réplicas y servicios;
+ * además, `invalidate` descarta el valor en el proceso que acaba de escribir la
+ * flag, para que vea su propio cambio de inmediato.
  */
 export class CachedFeatureFlagReader implements FeatureFlagReader {
   private readonly source: FeatureFlagSource;
@@ -55,6 +59,15 @@ export class CachedFeatureFlagReader implements FeatureFlagReader {
     });
     this.inFlight.set(key, load);
     return load;
+  }
+
+  /** Descarta el valor en caché de una flag (o de todas): la siguiente lectura va al almacén. */
+  invalidate(key?: FeatureFlagKey): void {
+    if (key === undefined) {
+      this.cache.clear();
+    } else {
+      this.cache.delete(key);
+    }
   }
 
   private async load(key: FeatureFlagKey, previous: CacheEntry | undefined): Promise<boolean> {

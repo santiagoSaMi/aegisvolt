@@ -24,13 +24,22 @@ describe('loadServiceConfig', () => {
     expect(config.telemetry.retentionDays).toBe(30);
   });
 
-  it('exige la tabla del servicio y la tabla de flags del ambiente', () => {
+  it('exige la tabla del servicio; la de flags se deriva del ambiente del despliegue', () => {
     expect(() => loadServiceConfig({ ...VALID_ENV, DYNAMODB_TABLE_NAME: undefined })).toThrow(
       /DYNAMODB_TABLE_NAME/,
     );
-    expect(() => loadServiceConfig({ ...VALID_ENV, FEATURE_FLAGS_TABLE_NAME: undefined })).toThrow(
-      /FEATURE_FLAGS_TABLE_NAME/,
-    );
+    expect(
+      loadServiceConfig({ ...VALID_ENV, FEATURE_FLAGS_TABLE_NAME: undefined }).featureFlags
+        .tableName,
+    ).toBe('aegisvolt-feature-flags-local');
+    expect(() =>
+      loadServiceConfig({
+        ...VALID_ENV,
+        APP_ENV: 'test',
+        AWS_ENDPOINT_URL: undefined,
+        FEATURE_FLAGS_TABLE_NAME: 'aegisvolt-feature-flags-prod',
+      }),
+    ).toThrow(/FEATURE_FLAGS_TABLE_NAME/);
   });
 
   it('en local exige un endpoint explícito (nunca AWS real por defecto)', () => {

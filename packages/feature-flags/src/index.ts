@@ -14,3 +14,11 @@ export {
 } from './cached-reader.ts';
 export { DynamoDbFeatureFlagSource } from './dynamodb-source.ts';
 export { featureFlagKeys, featureFlagsTableDefinition, featureFlagsTableName } from './table.ts';
+export {
+  FEATURE_FLAG_CATALOG,
+  FLAG_ENVIRONMENTS,
+  definitionOf,
+  type FeatureFlagDefinition,
+  type FlagEnvironment,
+} from './catalog.ts';
+export { FeatureFlagsTableError, resolveFeatureFlagsTable } from './environment.ts';

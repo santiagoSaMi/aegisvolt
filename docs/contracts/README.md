@@ -8,7 +8,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 | billing-wallet | `billingWalletV1` | 1.1.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
 | energy-dispatch | `energyDispatchV1` | 1.1.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones, parada, cargadores y telemetría) |
 | saga-orchestrator | `sagaOrchestratorV1` | 1.1.0 | saga-orchestrator-service | graphql-api |
-| feature-flags (datos, no HTTP) | `featureFlagsV1` | 1.0.0 | graphql-api (único escritor) | los tres servicios (lectura) |
+| feature-flags (datos + módulo de flags del graphql-api) | `featureFlagsV1` | 1.1.0 | graphql-api (único escritor) | los tres servicios (lectura) |
 
 Historial de cambios: [`packages/contracts/CHANGELOG.md`](../../packages/contracts/CHANGELOG.md).
 
@@ -149,7 +149,12 @@ Versión 1.1.0, implementada en [saga-orchestrator-service](../../services/saga-
 
 - Las claves son `ENABLE_DYNAMIC_SURGE_PRICING`, `ENABLE_FAST_CHARGE_BOOST` y `SIMULATE_CHARGER_HARDWARE_FAULT`.
 - `FEATURE_FLAG_EVALUATORS` indica qué servicio evalúa cada flag.
-- `featureFlagStateSchema` (`key`, `enabled`, `version`, `updatedAt`, `updatedBy`) describe el estado tal como lo leen los servicios desde `aegisvolt-feature-flags-<env>`.
+- `featureFlagStateSchema` (`key`, `enabled` **booleano**, `description?`, `version`, `updatedAt`, `updatedBy`) describe el estado tal como lo leen los servicios desde `aegisvolt-feature-flags-<env>`.
+- Desde 1.1.0, operaciones del graphql-api ([ADR-0025](../adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md)). **Ninguna recibe el ambiente**: es el del despliegue.
+  - `featureFlagsViewSchema` (`GetFeatureFlags`): `environment`, `flags[]` con `source` (`STORE`, `LAST_KNOWN` o `DEFAULT`), `degraded` y `readAt`.
+  - `updateFeatureFlagRequestSchema` (`UpdateFeatureFlag`, solo `platform-admins`): `{enabled, expectedVersion?}` estricto.
+  - `featureFlagChangeViewSchema` (auditoría): `from`, `to`, `version`, `changedBy`, `changedAt`, `correlationId` y `environment`.
+  - Errores: `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 FEATURE_FLAG_NOT_FOUND`, `409 FEATURE_FLAG_VERSION_CONFLICT` y `503 SERVICE_UNAVAILABLE`.
 
 ## Versionado
 

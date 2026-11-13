@@ -69,3 +69,16 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - El API server de k3s se publica en `0.0.0.0:65xx` del host, no solo en loopback.
 - El registry de ECR (`127.0.0.1:5100`) sigue en ejecución después de `stop.sh`.
 - **Mitigación:** uso exclusivamente local. Se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST` en el futuro.
+
+## L-08 · Floci no evalúa IAM: el aislamiento de flags por ambiente no depende de políticas
+
+- **Requisito:** §2.2 y §6.4 — estado de flags independiente por ambiente; un cambio en `dev` no afecta a `prod`.
+- **Comportamiento:** Floci acepta cualquier credencial ficticia y no aplica políticas IAM. Un proceso podría leer cualquier tabla si se le indicara.
+- **Cómo se cumple de forma verificable ([ADR-0025](adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md)):**
+  - una tabla física por ambiente;
+  - la tabla de cada proceso se deriva de `APP_ENV`, que fija el despliegue, y en `dev`/`test`/`prod` no se admite otra (el proceso no arranca);
+  - ninguna operación acepta un ambiente;
+  - el repositorio queda ligado a una sola tabla.
+
+  Lo demuestran la prueba de integración y el [runbook](runbooks/feature-flags-demo.md).
+- **En AWS real (fase de IaC):** además, el rol IAM de cada pod solo puede leer `aegisvolt-feature-flags-<su env>`, y solo el graphql-api de ese ambiente puede escribirla. Se verificará con `terraform plan`; Floci no lo puede demostrar.

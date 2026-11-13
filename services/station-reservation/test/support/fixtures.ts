@@ -10,7 +10,7 @@ import {
   type RegisterStationCommand,
 } from '../../src/application/index.ts';
 import { ReservationPolicy } from '../../src/domain/index.ts';
-import { StaticFeatureFlagReader } from '../../src/infrastructure/feature-flags/static-feature-flag-reader.ts';
+import { StaticFeatureFlagReader } from './static-feature-flag-reader.ts';
 import { FixedClock, InMemoryStore } from './in-memory-store.ts';
 
 export const START = new Date('2026-11-13T15:00:00.000Z');

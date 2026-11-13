@@ -23,7 +23,7 @@ describe('loadServiceConfig', () => {
       maxAttempts: 2,
     });
     expect(config.reservationPolicy).toEqual({ standardHoldMs: 120_000, boostedHoldMs: 300_000 });
-    expect(config.featureFlags.ENABLE_FAST_CHARGE_BOOST).toBe(false);
+    expect(config.featureFlags.tableName).toBe('aegisvolt-feature-flags-local');
   });
 
   it('en local exige un endpoint de AWS explícito (nunca AWS real por omisión)', () => {
@@ -57,13 +57,18 @@ describe('loadServiceConfig', () => {
     ).toThrow(/HTTP_REQUEST_TIMEOUT_MS/);
   });
 
-  it('activa la flag provisional solo con "true"', () => {
-    expect(
-      loadServiceConfig({ ...LOCAL_ENV, FEATURE_ENABLE_FAST_CHARGE_BOOST: 'true' }).featureFlags
-        .ENABLE_FAST_CHARGE_BOOST,
-    ).toBe(true);
+  it('lee las flags de la tabla del ambiente; no puede apuntar a la de otro', () => {
+    expect(loadServiceConfig(LOCAL_ENV).featureFlags).toEqual({
+      tableName: 'aegisvolt-feature-flags-local',
+      cacheTtlMs: 5_000,
+    });
     expect(() =>
-      loadServiceConfig({ ...LOCAL_ENV, FEATURE_ENABLE_FAST_CHARGE_BOOST: 'yes' }),
-    ).toThrow(/FEATURE_ENABLE_FAST_CHARGE_BOOST/);
+      loadServiceConfig({
+        ...LOCAL_ENV,
+        APP_ENV: 'dev',
+        AWS_ENDPOINT_URL: undefined,
+        FEATURE_FLAGS_TABLE_NAME: 'aegisvolt-feature-flags-prod',
+      }),
+    ).toThrow(/FEATURE_FLAGS_TABLE_NAME/);
   });
 });

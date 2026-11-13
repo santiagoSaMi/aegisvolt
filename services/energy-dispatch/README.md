@@ -49,7 +49,7 @@ scripts/create-local-table.ts   tabla en Floci para desarrollo (rechaza endpoint
 scripts/floci/start.sh
 cp services/energy-dispatch/.env.example services/energy-dispatch/.env
 pnpm build:packages
-pnpm --filter @aegisvolt/feature-flags flags:create-local-table local    # flags en false
+pnpm --filter @aegisvolt/feature-flags flags:create-local-table local    # valores iniciales de local
 pnpm --filter @aegisvolt/energy-dispatch-service db:create-local-table
 pnpm --filter @aegisvolt/energy-dispatch-service dev                     # http://localhost:4103
 ```

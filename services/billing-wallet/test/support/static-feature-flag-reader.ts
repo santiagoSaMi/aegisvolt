@@ -1,8 +1,8 @@
-import type { BillingFlag, FeatureFlagReader } from '../../application/index.ts';
+import type { BillingFlag, FeatureFlagReader } from '../../src/application/index.ts';
 
 /**
- * Adaptador PROVISIONAL de flags: valores fijados por configuración. El
- * definitivo leerá `aegisvolt-feature-flags-<env>` (ADR-0007) con el mismo puerto.
+ * Doble de prueba: flags con valores fijos (sin DynamoDB). En ejecución el
+ * servicio usa el lector de `aegisvolt-feature-flags-<env>` (ADR-0025).
  */
 export class StaticFeatureFlagReader implements FeatureFlagReader {
   private readonly values: Readonly<Record<BillingFlag, boolean>>;

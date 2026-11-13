@@ -17,9 +17,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "flags:create-local-table": "node --env-file-if-exists=.env scripts/create-local-table.ts",
-    "flags:set": "node --env-file-if-exists=.env scripts/set-flag.ts",
-    "clean": "rm -rf dist coverage"
+    "clean": "rm -rf dist coverage",
+    "flags:create-local-table": "node --env-file-if-exists=.env scripts/create-local-table.ts"
   },
   "dependencies": {
     "@aegisvolt/contracts": "workspace:*",

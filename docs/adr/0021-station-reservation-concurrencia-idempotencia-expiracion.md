@@ -57,7 +57,7 @@ La fase pide además los estados `AVAILABLE`, `RESERVED` y `OCCUPIED`, una capa 
 - **Endpoint AWS** solo por `AWS_ENDPOINT_URL` (Zod), obligatorio con `APP_ENV=local`.
 - **Timeouts del SDK** con `NodeHttpHandler` (`connectionTimeout`/`requestTimeout`) y `maxAttempts` bajo. La configuración valida que el presupuesto de DynamoDB quepa en el HTTP.
 - **Readiness:** `DescribeTable` (tabla `ACTIVE`) con caché de 2 s. **Liveness:** sin dependencias.
-- **Flags:** `StaticFeatureFlagReader` provisional detrás del puerto `FeatureFlagReader`, hasta el lector DynamoDB de ADR-0007.
+- **Flags:** `StaticFeatureFlagReader` provisional detrás del puerto `FeatureFlagReader`, hasta el lector DynamoDB de ADR-0007. *(Sustituido por el lector DynamoDB en [ADR-0025](0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md).)*
 
 ## Alternativas
 
