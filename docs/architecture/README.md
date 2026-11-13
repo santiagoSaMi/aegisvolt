@@ -28,6 +28,9 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 | 07 | [CI/CD](07-cicd.md) | 17 |
 | 08 | [Pruebas](08-testing.md) | 18 |
 | 09 | [Análisis de la especificación](09-analisis-especificacion.md) | Contradicciones, ambigüedades, riesgos |
+| 10 | [Modelo de dominio por bounded context](10-modelo-de-dominio.md) | Entidades, Value Objects, invariantes, estados y errores |
+| — | [Contratos de integración](../contracts/README.md) | Peticiones, respuestas, errores, cabeceras, idempotencia y versiones |
+| — | [Runbook: demostración de la SAGA](../runbooks/saga-demo.md) | Evidencia de DynamoDB (Floci) de éxito, fallos, compensaciones y recuperación |
 
 ## Estructura del monorepo
 
@@ -38,7 +41,7 @@ apps/web                              apps/graphql-api
 services/saga-orchestrator            services/station-reservation
 services/billing-wallet               services/energy-dispatch
 packages/contracts (HTTP, OpenAPI)    packages/logger (JSON, correlation_id)   packages/config (env)
-packages/feature-flags (fase posterior, ADR-0007)
+packages/feature-flags (lector de flags, ADR-0007)
 prefect/ (Python)                     tests/e2e
 infra/terraform/{bootstrap,global,live,modules}   infra/k8s/{base,components,overlays}   infra/local/floci
 .github/workflows                     docs/{architecture,adr}   scripts/
@@ -52,7 +55,7 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | --- | --- | --- |
 | [0001](../adr/0001-floci-emulador-aws-local.md) | Floci como emulador AWS local | Aceptado |
 | [0002](../adr/0002-bounded-contexts-y-orquestador-dedicado.md) | Bounded contexts y orquestador dedicado | Aceptado |
-| [0003](../adr/0003-saga-orquestada-maquina-estados-persistente.md) | SAGA orquestada con máquina de estados persistente | Aceptado |
+| [0003](../adr/0003-saga-orquestada-maquina-estados-persistente.md) | SAGA orquestada con máquina de estados persistente | Aceptado (estados sustituidos por ADR-0024) |
 | [0004](../adr/0004-comunicacion-sincrona-http-contratos-openapi.md) | Comunicación síncrona HTTP con contratos OpenAPI | Aceptado |
 | [0005](../adr/0005-idempotencia-ids-pregenerados-y-tombstones.md) | Idempotencia con IDs pre-generados y tombstones | Aceptado |
 | [0006](../adr/0006-dynamodb-single-table-por-servicio.md) | DynamoDB single-table por servicio | Aceptado |
@@ -69,5 +72,10 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0017](../adr/0017-frontend-spa-mismo-origen-polling.md) | Frontend SPA, mismo origen y polling | Aceptado |
 | [0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md) | Toolchain del monorepo: pnpm, Node 26, TypeScript 6 y calidad | Aceptado |
 | [0019](../adr/0019-paquetes-transversales-logger-config-contracts.md) | Paquetes transversales: logger (pino), config (zod) y contracts | Aceptado |
+| [0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md) | Modelos de dominio por bounded context y contratos con Zod | Aceptado |
+| [0021](../adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md) | station-reservation: concurrencia, idempotencia, expiración y presentación | Aceptado |
+| [0022](../adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md) | billing-wallet: libro mayor atómico, idempotencia y reembolso como operación propia | Aceptado |
+| [0023](../adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md) | energy-dispatch: puerto del cargador, falla simulada por flag, telemetría y apagado ordenado | Aceptado |
+| [0024](../adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md) | SAGA orquestada: estados por hito, persistencia antes y después, lease y recuperación | Aceptado (sustituye los estados de ADR-0003) |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

@@ -50,7 +50,7 @@ export default defineConfig(
 
   // Código Node.js (servicios, API y paquetes).
   {
-    files: ['apps/graphql-api/**/*.ts', 'services/**/*.ts', 'packages/**/*.ts'],
+    files: ['apps/graphql-api/**/*.ts', 'services/**/*.ts', 'packages/**/*.ts', 'tests/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
 

@@ -11,7 +11,7 @@ Cubre los puntos 1–6 del diseño. Las decisiones se registran en [ADR-0002](..
 | **saga-orchestrator-service** | Dueño del proceso "Reservar y Activar Carga". Mantiene la máquina de estados persistente, ejecuta los pasos y las compensaciones, aplica reintentos y timeouts, y recupera SAGAs tras reinicios. | Reglas internas de cada servicio (disponibilidad, saldo, hardware). |
 | **station-reservation-service** | Catálogo de estaciones y conectores. Bloqueo temporal (*hold*) de conectores, confirmación y liberación. Evalúa `ENABLE_FAST_CHARGE_BOOST`. | Precios, cobros, hardware. |
 | **billing-wallet-service** | Billeteras de flota, tarifas, cálculo del cargo estimado, débito, reembolso y libro mayor. Evalúa `ENABLE_DYNAMIC_SURGE_PRICING`. | Disponibilidad de conectores, hardware. |
-| **energy-dispatch-service** | Sesiones de despacho, orden de activación al cargador a través de un puerto `ChargerGateway` (adaptador simulado), aborto de sesiones y telemetría simulada. Evalúa `SIMULATE_CHARGER_HARDWARE_FAULT`. | Cobros, reservas. |
+| **energy-dispatch-service** | Sesiones de despacho, orden de activación al cargador a través de un puerto `ChargerAdapter` (adaptador `SimulatedChargerAdapter`), aborto de sesiones y telemetría simulada. Evalúa `SIMULATE_CHARGER_HARDWARE_FAULT`. | Cobros, reservas. |
 | **Prefect** (`prefect/`, Python) | Flujos de salud de los tres ambientes y auditoría de consistencia de SAGAs (lectura). | Escribir en tablas de negocio. |
 
 > La especificación pide "mínimo tres" microservicios. El orquestador es un cuarto servicio desplegable; la justificación está en [ADR-0002](../adr/0002-bounded-contexts-y-orquestador-dedicado.md) y en [09-analisis-especificacion.md](09-analisis-especificacion.md) (P-17).
@@ -116,7 +116,7 @@ flowchart LR
 
   subgraph orch["saga-orchestrator-service"]
     direction TB
-    oHttp["interfaces/http<br/>POST /sagas, GET /sagas"]
+    oHttp["presentation/http<br/>POST /sagas, GET /sagas"]
     oApp["application<br/>StartSaga · AdvanceSaga · RecoverSagas"]
     oDom["domain<br/>ChargingSaga (máquina de estados),<br/>políticas de reintento y compensación"]
     oPorts["puertos<br/>SagaRepository · ReservationPort ·<br/>BillingPort · DispatchPort · Clock · IdGenerator"]
@@ -132,7 +132,7 @@ flowchart LR
 
   subgraph bill["billing-wallet-service"]
     direction TB
-    bHttp["interfaces/http<br/>PUT /debits/{id}, POST /debits/{id}/refund"]
+    bHttp["presentation/http<br/>PUT /debits/{id}, POST /debits/{id}/refund"]
     bApp["application<br/>DebitEstimatedCharge · RefundDebit · TopUpWallet"]
     bDom["domain<br/>Wallet, Debit, Money, PricingPolicy (surge)"]
     bPorts["puertos<br/>WalletRepository · FeatureFlagReader · Clock"]
@@ -156,7 +156,7 @@ flowchart LR
 | Estado | Sin estado de negocio (solo el módulo de flags) | Estado persistente de cada SAGA |
 | Lógica | Autenticación, autorización, validación, composición de lecturas | Secuencia de pasos, decisión de compensar, reintentos, recuperación |
 | Mutación `reserveAndStartCharging` | Valida la entrada y la flota del usuario, y llama `POST /sagas` con `idempotencyKey` | Crea la SAGA, la ejecuta y devuelve su estado |
-| Fallos | Traduce errores a `errors[].extensions.code` | Decide entre `COMPLETED`, `COMPENSATED`, `FAILED` y `REQUIRES_ATTENTION` |
+| Fallos | Traduce errores a `errors[].extensions.code` | Decide entre `COMPLETED`, `COMPENSATED`, `FAILED` y `COMPENSATION_FAILED` (recuperable) |
 
 Esquema GraphQL orientativo (la versión definitiva se fija al implementar):
 
@@ -190,23 +190,25 @@ No se exponen mutaciones sueltas como "reservar" o "cobrar". Así nadie puede sa
 ## 4. Comunicación síncrona, contratos y timeouts
 
 - **Protocolo:** HTTP/1.1 con JSON entre pods, usando Services `ClusterIP`. Los errores siguen RFC 9457 (`application/problem+json` con `code`, `detail` y `correlationId`).
-- **Contratos:** cada servicio publica un **OpenAPI 3.1** versionado en `packages/contracts`. Los consumidores (GraphQL API y orquestador) generan o validan sus clientes a partir de él, y las pruebas de contrato verifican ambos lados ([08-testing.md](08-testing.md)).
-- **Cabeceras obligatorias:** `X-Correlation-Id` y, en las llamadas de la SAGA, `X-Saga-Id`. `Idempotency-Key` solo se usa en `POST /sagas`; el resto de operaciones de la SAGA son `PUT` idempotentes por ID.
+- **Contratos:** la fuente de verdad son los **esquemas Zod versionados** de `packages/contracts` ([ADR-0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md)). El proveedor los usa para validar peticiones y los consumidores (GraphQL API y orquestador) para validar respuestas. La especificación completa (rutas, cuerpos, errores y versiones) está en [docs/contracts](../contracts/README.md).
+- **Cabeceras obligatorias:** `x-correlation-id` y, en las llamadas de la SAGA, `x-saga-id`. `idempotency-key` solo se usa en `POST /v1/sagas`; el resto de operaciones de la SAGA son `PUT` idempotentes por ID.
 
-### Contratos principales
+### Contratos principales (resumen de v1)
+
+Todas las rutas llevan el prefijo de versión `/v1`.
 
 | Servicio | Operación | Respuestas de negocio |
 | --- | --- | --- |
-| reservation | `PUT /reservations/{reservationId}` `{sagaId, fleetId, stationId, connectorId, holdSeconds, fastChargeBoost}` | `201`/`200` HELD · `409 CONNECTOR_UNAVAILABLE` · `409 RESERVATION_CANCELLED` (tombstone) · `403 FAST_CHARGE_BOOST_DISABLED` · `404` |
-| reservation | `POST /reservations/{id}/confirm` | `200 CONFIRMED` · `409 RESERVATION_NOT_HELD` |
-| reservation | `POST /reservations/{id}/release` `{reason}` | `200 RELEASED` / `ALREADY_RELEASED` / `VOIDED` (crea tombstone si no existía) |
-| reservation | `GET /stations?city=`, `GET /stations/{id}` | lecturas |
-| billing | `PUT /debits/{debitId}` `{sagaId, fleetId, energyKwh, connectorPowerKw}` | `201`/`200` DEBITED `{amountMinor, currency, surgeApplied}` · `422 INSUFFICIENT_FUNDS` · `409 DEBIT_VOIDED` |
-| billing | `POST /debits/{id}/refund` `{reason}` | `200 REFUNDED` / `ALREADY_REFUNDED` / `VOIDED` |
-| billing | `GET /wallets/{fleetId}`, `GET /wallets/{fleetId}/transactions`, `POST /wallets/{fleetId}/top-ups/{topUpId}` | lecturas / recarga |
-| dispatch | `PUT /sessions/{sessionId}` `{sagaId, stationId, connectorId, energyKwh}` | `201`/`200` ACTIVE · `422 CHARGER_HARDWARE_FAULT {faultCode, simulated}` · `409 SESSION_ABORTED` |
-| dispatch | `POST /sessions/{id}/abort`, `GET /sessions/{id}`, `GET /sessions/{id}/telemetry` | `200 ABORTED` / `ALREADY_ABORTED` / `VOIDED` |
-| orchestrator | `POST /sagas` (`Idempotency-Key`), `GET /sagas/{id}`, `GET /sagas?fleetId&status&limit` | `201` terminal · `202` en curso |
+| reservation | `PUT /v1/reservations/{reservationId}` `{sagaId, fleetId, stationId, connectorId, fastChargeBoost}`; la duración del *hold* la decide el servicio | `201`/`200` HELD · `409 CONNECTOR_UNAVAILABLE` · `409 ULTRA_FAST_REQUIRES_BOOST` · `409 RESERVATION_CANCELLED` (tombstone) · `403 FAST_CHARGE_BOOST_DISABLED` · `404` |
+| reservation | `POST /v1/reservations/{id}/confirm` | `200 CONFIRMED` · `409 RESERVATION_NOT_HELD` / `RESERVATION_HOLD_EXPIRED` |
+| reservation | `POST /v1/reservations/{id}/release` `{reason}` | `200 RELEASED` / `ALREADY_RELEASED` / `VOIDED` (crea un tombstone si no existía) |
+| reservation | `GET /v1/stations?city=`, `GET /v1/stations/{id}` | lecturas |
+| billing | `PUT /v1/debits/{debitId}` `{sagaId, fleetId, energyKwh, connectorPowerKw}` | `201`/`200` DEBITED `{amount, pricing}` · `422 INSUFFICIENT_FUNDS` · `409 DEBIT_VOIDED` |
+| billing | `POST /v1/debits/{id}/refund` `{reason}` | `200 REFUNDED` / `ALREADY_REFUNDED` / `NOTHING_TO_REFUND` / `VOIDED` |
+| billing | `GET /v1/wallets/{fleetId}`, `GET /v1/wallets/{fleetId}/transactions`, `PUT /v1/wallets/{fleetId}/top-ups/{topUpId}` | lecturas / recarga |
+| dispatch | `PUT /v1/sessions/{sessionId}` `{sagaId, stationId, connectorId, energyKwh}` | `201`/`200` ACTIVE · `422 CHARGER_HARDWARE_FAULT {faultCode, simulated}` · `409 SESSION_ABORTED` |
+| dispatch | `POST /v1/sessions/{id}/abort`, `GET /v1/sessions/{id}`, `GET /v1/sessions/{id}/telemetry` | `200 ABORTED` / `ALREADY_ABORTED` / `ALREADY_FAILED` / `VOIDED` · `409 SESSION_ALREADY_COMPLETED` |
+| orchestrator | `POST /v1/sagas` (`idempotency-key`), `GET /v1/sagas/{id}`, `GET /v1/sagas/{id}/events`, `GET /v1/sagas?fleetId&status&limit` | `201` terminal · `202` en curso · `409 IDEMPOTENCY_KEY_CONFLICT` |
 
 ### Presupuesto de timeouts
 

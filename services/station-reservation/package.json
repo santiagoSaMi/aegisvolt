@@ -14,14 +14,22 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:create-local-table": "node --env-file-if-exists=.env scripts/create-local-table.ts",
     "clean": "rm -rf dist coverage"
   },
   "dependencies": {
     "@aegisvolt/config": "workspace:*",
     "@aegisvolt/contracts": "workspace:*",
-    "@aegisvolt/logger": "workspace:*"
+    "@aegisvolt/logger": "workspace:*",
+    "@aws-sdk/client-dynamodb": "3.1163.0",
+    "@aws-sdk/lib-dynamodb": "3.1163.0",
+    "@smithy/node-http-handler": "4.14.2",
+    "express": "5.3.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/express": "5.0.6",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

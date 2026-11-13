@@ -16,8 +16,8 @@ Cubre los puntos 10 y 11. Decisiones: [ADR-0007](../adr/0007-feature-flags-dynam
 | Flag | Servicio que la evalúa | Semántica propuesta | `dev` | `test` | `prod` |
 | --- | --- | --- | --- | --- | --- |
 | `ENABLE_DYNAMIC_SURGE_PRICING` | billing-wallet | En las ventanas pico configuradas (p. ej. 17:00–21:00, America/Bogota) aplica `surgeMultiplier` (p. ej. 1,25) a la tarifa. | `true` | `true` | `false` |
-| `ENABLE_FAST_CHARGE_BOOST` | station-reservation | Si está activa, una reserva con `fastChargeBoost=true` puede tomar conectores `ultraFast` con *hold* extendido. Si no, esas reservas responden `403 FAST_CHARGE_BOOST_DISABLED`. | `true` | `true` | `false` |
-| `SIMULATE_CHARGER_HARDWARE_FAULT` | energy-dispatch (adaptador `SimulatedChargerGateway`) | Fuerza `CHARGER_HARDWARE_FAULT` en la activación para demostrar el rollback de la SAGA. | `false` | `false` | `false` |
+| `ENABLE_FAST_CHARGE_BOOST` | station-reservation | Si está activa, una reserva con `fastChargeBoost=true` puede tomar conectores `ultraFast` (≥ 150 kW) y obtiene un *hold* extendido (300 s en vez de 120 s). Con la flag apagada, `fastChargeBoost=true` responde `403 FAST_CHARGE_BOOST_DISABLED`. Un conector `ultraFast` sin `fastChargeBoost` responde `409 ULTRA_FAST_REQUIRES_BOOST`. Implementado en `ReservationPolicy`. | `true` | `true` | `false` |
+| `SIMULATE_CHARGER_HARDWARE_FAULT` | energy-dispatch (adaptador `SimulatedChargerAdapter`) | Fuerza `CHARGER_HARDWARE_FAULT` en la activación para demostrar el rollback de la SAGA. | `false` | `false` | `false` |
 
 - La semántica de `ENABLE_FAST_CHARGE_BOOST` es una interpretación de una especificación ambigua (P-14).
 - `SIMULATE_CHARGER_HARDWARE_FAULT` existe en los tres ambientes, como pide §2.2, pero empieza en `false` y solo un administrador puede cambiarla, con auditoría.

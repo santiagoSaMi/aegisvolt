@@ -1,0 +1,34 @@
+{
+  "name": "@aegisvolt/feature-flags",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lectura de feature flags por ambiente desde DynamoDB con caché corta (ADR-0007).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "flags:create-local-table": "node --env-file-if-exists=.env scripts/create-local-table.ts",
+    "flags:set": "node --env-file-if-exists=.env scripts/set-flag.ts",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "@aegisvolt/contracts": "workspace:*",
+    "@aws-sdk/client-dynamodb": "3.1163.0",
+    "@aws-sdk/lib-dynamodb": "3.1163.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createHealthServer,
   type HealthServerOptions,
-} from '../src/interfaces/http/health-server.ts';
+} from '../src/presentation/http/health-server.ts';
 
 let server: Server | undefined;
 

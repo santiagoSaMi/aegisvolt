@@ -83,9 +83,9 @@ Cada servicio sigue esta estructura:
 services/<service-name>/
   src/
     domain/          # entidades, value objects, reglas, errores de dominio (sin dependencias de infraestructura)
-    application/     # casos de uso y puertos (interfaces)
+    application/     # casos de uso y puertos (interfaces TypeScript)
     infrastructure/  # adaptadores: DynamoDB, HTTP, feature flags, logger
-    interfaces/      # controllers/handlers HTTP (delgados: validan, delegan, mapean)
+    presentation/    # controllers/handlers HTTP (delgados: validan, delegan, mapean)
     main.ts          # composition root (inyección de dependencias manual)
   test/
   Dockerfile
