@@ -20,6 +20,9 @@
     "test": "vitest run",
     "clean": "rm -rf dist coverage"
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

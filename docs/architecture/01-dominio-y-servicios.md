@@ -190,23 +190,25 @@ No se exponen mutaciones sueltas como "reservar" o "cobrar". Así nadie puede sa
 ## 4. Comunicación síncrona, contratos y timeouts
 
 - **Protocolo:** HTTP/1.1 con JSON entre pods, usando Services `ClusterIP`. Los errores siguen RFC 9457 (`application/problem+json` con `code`, `detail` y `correlationId`).
-- **Contratos:** cada servicio publica un **OpenAPI 3.1** versionado en `packages/contracts`. Los consumidores (GraphQL API y orquestador) generan o validan sus clientes a partir de él, y las pruebas de contrato verifican ambos lados ([08-testing.md](08-testing.md)).
-- **Cabeceras obligatorias:** `X-Correlation-Id` y, en las llamadas de la SAGA, `X-Saga-Id`. `Idempotency-Key` solo se usa en `POST /sagas`; el resto de operaciones de la SAGA son `PUT` idempotentes por ID.
+- **Contratos:** la fuente de verdad son los **esquemas Zod versionados** de `packages/contracts` ([ADR-0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md)). El proveedor los usa para validar peticiones y los consumidores (GraphQL API y orquestador) para validar respuestas. La especificación completa (rutas, cuerpos, errores y versiones) está en [docs/contracts](../contracts/README.md).
+- **Cabeceras obligatorias:** `x-correlation-id` y, en las llamadas de la SAGA, `x-saga-id`. `idempotency-key` solo se usa en `POST /v1/sagas`; el resto de operaciones de la SAGA son `PUT` idempotentes por ID.
 
-### Contratos principales
+### Contratos principales (resumen de v1)
+
+Todas las rutas llevan el prefijo de versión `/v1`.
 
 | Servicio | Operación | Respuestas de negocio |
 | --- | --- | --- |
-| reservation | `PUT /reservations/{reservationId}` `{sagaId, fleetId, stationId, connectorId, holdSeconds, fastChargeBoost}` | `201`/`200` HELD · `409 CONNECTOR_UNAVAILABLE` · `409 RESERVATION_CANCELLED` (tombstone) · `403 FAST_CHARGE_BOOST_DISABLED` · `404` |
-| reservation | `POST /reservations/{id}/confirm` | `200 CONFIRMED` · `409 RESERVATION_NOT_HELD` |
-| reservation | `POST /reservations/{id}/release` `{reason}` | `200 RELEASED` / `ALREADY_RELEASED` / `VOIDED` (crea tombstone si no existía) |
-| reservation | `GET /stations?city=`, `GET /stations/{id}` | lecturas |
-| billing | `PUT /debits/{debitId}` `{sagaId, fleetId, energyKwh, connectorPowerKw}` | `201`/`200` DEBITED `{amountMinor, currency, surgeApplied}` · `422 INSUFFICIENT_FUNDS` · `409 DEBIT_VOIDED` |
-| billing | `POST /debits/{id}/refund` `{reason}` | `200 REFUNDED` / `ALREADY_REFUNDED` / `VOIDED` |
-| billing | `GET /wallets/{fleetId}`, `GET /wallets/{fleetId}/transactions`, `POST /wallets/{fleetId}/top-ups/{topUpId}` | lecturas / recarga |
-| dispatch | `PUT /sessions/{sessionId}` `{sagaId, stationId, connectorId, energyKwh}` | `201`/`200` ACTIVE · `422 CHARGER_HARDWARE_FAULT {faultCode, simulated}` · `409 SESSION_ABORTED` |
-| dispatch | `POST /sessions/{id}/abort`, `GET /sessions/{id}`, `GET /sessions/{id}/telemetry` | `200 ABORTED` / `ALREADY_ABORTED` / `VOIDED` |
-| orchestrator | `POST /sagas` (`Idempotency-Key`), `GET /sagas/{id}`, `GET /sagas?fleetId&status&limit` | `201` terminal · `202` en curso |
+| reservation | `PUT /v1/reservations/{reservationId}` `{sagaId, fleetId, stationId, connectorId, fastChargeBoost}`; la duración del *hold* la decide el servicio | `201`/`200` HELD · `409 CONNECTOR_UNAVAILABLE` · `409 ULTRA_FAST_REQUIRES_BOOST` · `409 RESERVATION_CANCELLED` (tombstone) · `403 FAST_CHARGE_BOOST_DISABLED` · `404` |
+| reservation | `POST /v1/reservations/{id}/confirm` | `200 CONFIRMED` · `409 RESERVATION_NOT_HELD` / `RESERVATION_HOLD_EXPIRED` |
+| reservation | `POST /v1/reservations/{id}/release` `{reason}` | `200 RELEASED` / `ALREADY_RELEASED` / `VOIDED` (crea un tombstone si no existía) |
+| reservation | `GET /v1/stations?city=`, `GET /v1/stations/{id}` | lecturas |
+| billing | `PUT /v1/debits/{debitId}` `{sagaId, fleetId, energyKwh, connectorPowerKw}` | `201`/`200` DEBITED `{amount, pricing}` · `422 INSUFFICIENT_FUNDS` · `409 DEBIT_VOIDED` |
+| billing | `POST /v1/debits/{id}/refund` `{reason}` | `200 REFUNDED` / `ALREADY_REFUNDED` / `NOTHING_TO_REFUND` / `VOIDED` |
+| billing | `GET /v1/wallets/{fleetId}`, `GET /v1/wallets/{fleetId}/transactions`, `PUT /v1/wallets/{fleetId}/top-ups/{topUpId}` | lecturas / recarga |
+| dispatch | `PUT /v1/sessions/{sessionId}` `{sagaId, stationId, connectorId, energyKwh}` | `201`/`200` ACTIVE · `422 CHARGER_HARDWARE_FAULT {faultCode, simulated}` · `409 SESSION_ABORTED` |
+| dispatch | `POST /v1/sessions/{id}/abort`, `GET /v1/sessions/{id}`, `GET /v1/sessions/{id}/telemetry` | `200 ABORTED` / `ALREADY_ABORTED` / `ALREADY_FAILED` / `VOIDED` · `409 SESSION_ALREADY_COMPLETED` |
+| orchestrator | `POST /v1/sagas` (`idempotency-key`), `GET /v1/sagas/{id}`, `GET /v1/sagas/{id}/events`, `GET /v1/sagas?fleetId&status&limit` | `201` terminal · `202` en curso · `409 IDEMPOTENCY_KEY_CONFLICT` |
 
 ### Presupuesto de timeouts
 

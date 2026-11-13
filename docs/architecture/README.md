@@ -28,6 +28,8 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 | 07 | [CI/CD](07-cicd.md) | 17 |
 | 08 | [Pruebas](08-testing.md) | 18 |
 | 09 | [Análisis de la especificación](09-analisis-especificacion.md) | Contradicciones, ambigüedades, riesgos |
+| 10 | [Modelo de dominio por bounded context](10-modelo-de-dominio.md) | Entidades, Value Objects, invariantes, estados y errores |
+| — | [Contratos de integración](../contracts/README.md) | Peticiones, respuestas, errores, cabeceras, idempotencia y versiones |
 
 ## Estructura del monorepo
 
@@ -69,5 +71,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0017](../adr/0017-frontend-spa-mismo-origen-polling.md) | Frontend SPA, mismo origen y polling | Aceptado |
 | [0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md) | Toolchain del monorepo: pnpm, Node 26, TypeScript 6 y calidad | Aceptado |
 | [0019](../adr/0019-paquetes-transversales-logger-config-contracts.md) | Paquetes transversales: logger (pino), config (zod) y contracts | Aceptado |
+| [0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md) | Modelos de dominio por bounded context y contratos con Zod | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

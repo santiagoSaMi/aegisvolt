@@ -2,6 +2,7 @@
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-11-12
+- **Relación:** precisado por [ADR-0020](0020-modelos-de-dominio-y-contratos-zod.md). Las pruebas de contrato validan contra los esquemas Zod compartidos, y se añaden pruebas de alineación entre dominio y contrato.
 
 ## Contexto
 
