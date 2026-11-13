@@ -29,19 +29,22 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 | 08 | [Pruebas](08-testing.md) | 18 |
 | 09 | [Análisis de la especificación](09-analisis-especificacion.md) | Contradicciones, ambigüedades, riesgos |
 
-## Estructura propuesta del monorepo
+## Estructura del monorepo
 
-Se creará en las fases de implementación, no ahora.
+La estructura inicial está creada ([ADR-0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md)). Los directorios marcados con *(fase posterior)* se crean al implementar esa fase.
 
 ```text
-apps/frontend                         apps/graphql-api
-services/saga-orchestrator-service    services/station-reservation-service
-services/billing-wallet-service       services/energy-dispatch-service
-packages/contracts (OpenAPI)          packages/feature-flags   packages/observability (logger, contexto)
-observability/prefect (Python)        infra/terraform/{bootstrap,global,live,modules}
-infra/k8s/{base,components,overlays}  infra/local/{floci,prefect}
-.github/workflows                     docs/{architecture,adr,runbooks}
+apps/web                              apps/graphql-api
+services/saga-orchestrator            services/station-reservation
+services/billing-wallet               services/energy-dispatch
+packages/contracts (HTTP, OpenAPI)    packages/logger (JSON, correlation_id)   packages/config (env)
+packages/feature-flags (fase posterior, ADR-0007)
+prefect/ (Python)                     tests/e2e
+infra/terraform/{bootstrap,global,live,modules}   infra/k8s/{base,components,overlays}   infra/local/floci
+.github/workflows                     docs/{architecture,adr}   scripts/
 ```
+
+Los nombres de despliegue y de logs (`service`) conservan el nombre completo de la especificación, p. ej. `station-reservation-service`. Solo el directorio es más corto.
 
 ## Índice de ADR
 
@@ -64,5 +67,7 @@ infra/k8s/{base,components,overlays}  infra/local/{floci,prefect}
 | [0015](../adr/0015-cicd-github-actions-hibrido-y-promocion.md) | CI/CD híbrido y promoción entre ramas | Propuesto (P-21, P-22) |
 | [0016](../adr/0016-estrategia-de-pruebas.md) | Estrategia de pruebas | Aceptado |
 | [0017](../adr/0017-frontend-spa-mismo-origen-polling.md) | Frontend SPA, mismo origen y polling | Aceptado |
+| [0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md) | Toolchain del monorepo: pnpm, Node 26, TypeScript 6 y calidad | Aceptado |
+| [0019](../adr/0019-paquetes-transversales-logger-config-contracts.md) | Paquetes transversales: logger (pino), config (zod) y contracts | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

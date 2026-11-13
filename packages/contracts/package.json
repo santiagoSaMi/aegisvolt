@@ -1,0 +1,28 @@
+{
+  "name": "@aegisvolt/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Contratos entre unidades desplegables: convenciones HTTP (cabeceras, problem+json) y, más adelante, especificaciones OpenAPI. Sin entidades ni reglas de negocio.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rm -rf dist coverage"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "aegisvolt",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AegisVolt: plataforma cloud-native de gestión de carga para flotas eléctricas (monorepo).",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.0.0 <27.0.0",
+    "pnpm": ">=12.18.0 <13.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:packages": "pnpm --filter \"./packages/**\" -r build",
+    "typecheck": "pnpm build:packages && pnpm -r typecheck",
+    "test": "pnpm build:packages && pnpm -r test",
+    "lint": "pnpm build:packages && pnpm lint:code && pnpm lint:deps",
+    "lint:code": "eslint . --max-warnings=0",
+    "lint:deps": "depcruise apps services packages --config .dependency-cruiser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "dev": "pnpm build:packages && pnpm --parallel --filter \"./apps/**\" --filter \"./services/**\" dev",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "catalog:",
+    "dependency-cruiser": "18.7.2",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "typescript": "catalog:",
+    "typescript-eslint": "8.72.2"
+  }
+}

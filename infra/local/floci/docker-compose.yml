@@ -11,24 +11,24 @@ services:
     container_name: aegisvolt-floci
     # UID:GID del usuario del host + GID del grupo docker, para que los datos
     # en ./data no queden como root y Floci pueda usar el socket de Docker.
-    user: "${FLOCI_UID:?run scripts/floci/start.sh}:${FLOCI_GID:?run scripts/floci/start.sh}"
+    user: '${FLOCI_UID:?run scripts/floci/start.sh}:${FLOCI_GID:?run scripts/floci/start.sh}'
     group_add:
-      - "${DOCKER_SOCKET_GID:?run scripts/floci/start.sh}"
+      - '${DOCKER_SOCKET_GID:?run scripts/floci/start.sh}'
     ports:
       # Solo loopback: el emulador no se expone a la red local.
-      - "127.0.0.1:4566:4566"
+      - '127.0.0.1:4566:4566'
     env_file:
       - ./config/floci.env
     environment:
       # Ruta absoluta del host para los bind mounts de contenedores hermanos.
-      FLOCI_STORAGE_HOST_PERSISTENT_PATH: "${FLOCI_HOST_DATA_DIR:?run scripts/floci/start.sh}"
+      FLOCI_STORAGE_HOST_PERSISTENT_PATH: '${FLOCI_HOST_DATA_DIR:?run scripts/floci/start.sh}'
     volumes:
       - ./data:/app/data
       # Requerido por EKS (k3s), ECR (registry:2), EC2 y Lambda: Floci crea contenedores hermanos.
       - /var/run/docker.sock:/var/run/docker.sock
     # Floci termina limpio con SIGTERM; damos margen para el flush a disco.
     stop_grace_period: 60s
-    restart: "no"
+    restart: 'no'
     networks:
       - floci
 

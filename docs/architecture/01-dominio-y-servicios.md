@@ -6,13 +6,13 @@ Cubre los puntos 1–6 del diseño. Las decisiones se registran en [ADR-0002](..
 
 | Componente | Responsabilidad | Fuera de su alcance |
 | --- | --- | --- |
-| **Frontend** (`apps/frontend`) | SPA en React + TypeScript con cuatro vistas obligatorias (§2.1): panel de estaciones y conectores, flujo "Reservar y activar carga", visor de feature flags del ambiente e historial de SAGAs y compensaciones. Habla **solo** con el endpoint GraphQL de su ambiente y refresca los datos por *polling* (ver [ADR-0017](../adr/0017-frontend-spa-mismo-origen-polling.md)). | Reglas de negocio, cálculo de precios, decisiones de estado. |
+| **Frontend** (`apps/web`) | SPA en React + TypeScript con cuatro vistas obligatorias (§2.1): panel de estaciones y conectores, flujo "Reservar y activar carga", visor de feature flags del ambiente e historial de SAGAs y compensaciones. Habla **solo** con el endpoint GraphQL de su ambiente y refresca los datos por *polling* (ver [ADR-0017](../adr/0017-frontend-spa-mismo-origen-polling.md)). | Reglas de negocio, cálculo de precios, decisiones de estado. |
 | **GraphQL API** (`apps/graphql-api`) | Capa de agregación (*BFF*) con un esquema unificado. Autentica el JWT, autoriza (rol y flota), valida la entrada, propaga `correlation_id` y compone respuestas de varios servicios (p. ej. estación + conectores + telemetría). Contiene el módulo administrativo de feature flags. | Orquestar la SAGA, decidir compensaciones, acceder a tablas de negocio. |
 | **saga-orchestrator-service** | Dueño del proceso "Reservar y Activar Carga". Mantiene la máquina de estados persistente, ejecuta los pasos y las compensaciones, aplica reintentos y timeouts, y recupera SAGAs tras reinicios. | Reglas internas de cada servicio (disponibilidad, saldo, hardware). |
 | **station-reservation-service** | Catálogo de estaciones y conectores. Bloqueo temporal (*hold*) de conectores, confirmación y liberación. Evalúa `ENABLE_FAST_CHARGE_BOOST`. | Precios, cobros, hardware. |
 | **billing-wallet-service** | Billeteras de flota, tarifas, cálculo del cargo estimado, débito, reembolso y libro mayor. Evalúa `ENABLE_DYNAMIC_SURGE_PRICING`. | Disponibilidad de conectores, hardware. |
 | **energy-dispatch-service** | Sesiones de despacho, orden de activación al cargador a través de un puerto `ChargerGateway` (adaptador simulado), aborto de sesiones y telemetría simulada. Evalúa `SIMULATE_CHARGER_HARDWARE_FAULT`. | Cobros, reservas. |
-| **Prefect** (`observability/prefect`, Python) | Flujos de salud de los tres ambientes y auditoría de consistencia de SAGAs (lectura). | Escribir en tablas de negocio. |
+| **Prefect** (`prefect/`, Python) | Flujos de salud de los tres ambientes y auditoría de consistencia de SAGAs (lectura). | Escribir en tablas de negocio. |
 
 > La especificación pide "mínimo tres" microservicios. El orquestador es un cuarto servicio desplegable; la justificación está en [ADR-0002](../adr/0002-bounded-contexts-y-orquestador-dedicado.md) y en [09-analisis-especificacion.md](09-analisis-especificacion.md) (P-17).
 

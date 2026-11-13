@@ -18,18 +18,52 @@ override.tf.json
 
 # --- Kubeconfig local generado ---
 *.kubeconfig
+kubeconfig
+kubeconfig.*
 
 # --- Entorno / secretos ---
 .env
 .env.*
 !.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials.*
 
-# --- Node / Python ---
+# --- Node / builds ---
 node_modules/
+.pnpm-store/
 dist/
+build/
 coverage/
+.vite/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+# --- Pruebas E2E ---
+playwright-report/
+test-results/
+blob-report/
+
+# --- Python / Prefect ---
 __pycache__/
+*.py[cod]
 .venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.prefect/
+
+# --- Temporales ---
+tmp/
+.tmp/
+.cache/
 
 # --- SO / editores ---
 .DS_Store

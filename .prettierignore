@@ -1,0 +1,17 @@
+# Generados / dependencias
+pnpm-lock.yaml
+**/node_modules/
+**/dist/
+**/coverage/
+**/.vite/
+
+# Datos y temporales locales
+infra/local/floci/data/
+**/.tmp/
+**/.terraform/
+
+# Documentación escrita a mano: se preserva su formato (tablas, diagramas Mermaid).
+*.md
+
+# Python (Prefect) usa su propio formateador.
+prefect/
