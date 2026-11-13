@@ -5,6 +5,7 @@ import {
   type BaseConfig,
   type EnvSource,
 } from '@aegisvolt/config';
+import { resolveFeatureFlagsTable } from '@aegisvolt/feature-flags';
 import { z } from 'zod';
 
 export const SERVICE_NAME = 'billing-wallet-service';
@@ -57,11 +58,13 @@ const serviceEnvSchema = z.object({
   PRICING_PEAK_WINDOWS: peakWindowsSchema,
   /** Desfase local respecto de UTC en minutos (Bogotá: -300, sin horario de verano). */
   PRICING_UTC_OFFSET_MINUTES: z.coerce.number().int().min(-840).max(840).default(-300),
-  /** Provisional hasta el lector de flags en DynamoDB (ADR-0007). */
-  FEATURE_ENABLE_DYNAMIC_SURGE_PRICING: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
+  /**
+   * Tabla de flags del ambiente (solo lectura, ADR-0007/0025). Opcional: por
+   * defecto `aegisvolt-feature-flags-<APP_ENV>`; en dev/test/prod no admite otra.
+   */
+  FEATURE_FLAGS_TABLE_NAME: z.string().optional(),
+  /** Vigencia de la caché de flags: un cambio se refleja en ≤ este tiempo. */
+  FEATURE_FLAGS_CACHE_TTL_MS: ms(0, 60_000, 5_000),
 });
 
 export interface ServiceConfig extends BaseConfig {
@@ -79,7 +82,7 @@ export interface ServiceConfig extends BaseConfig {
     readonly peakWindows: readonly { startMinute: number; endMinute: number }[];
     readonly utcOffsetMinutes: number;
   };
-  readonly featureFlags: { readonly ENABLE_DYNAMIC_SURGE_PRICING: boolean };
+  readonly featureFlags: { readonly tableName: string; readonly cacheTtlMs: number };
 }
 
 export function loadServiceConfig(env: EnvSource): ServiceConfig {
@@ -105,6 +108,15 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
     ]);
   }
 
+  let featureFlagsTable: string;
+  try {
+    featureFlagsTable = resolveFeatureFlagsTable(base.appEnv, service.FEATURE_FLAGS_TABLE_NAME);
+  } catch (error) {
+    throw new ConfigValidationError([
+      { variable: 'FEATURE_FLAGS_TABLE_NAME', message: (error as Error).message },
+    ]);
+  }
+
   return {
     ...base,
     http: { requestTimeoutMs: service.HTTP_REQUEST_TIMEOUT_MS },
@@ -125,6 +137,9 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
       peakWindows: service.PRICING_PEAK_WINDOWS,
       utcOffsetMinutes: service.PRICING_UTC_OFFSET_MINUTES,
     },
-    featureFlags: { ENABLE_DYNAMIC_SURGE_PRICING: service.FEATURE_ENABLE_DYNAMIC_SURGE_PRICING },
+    featureFlags: {
+      tableName: featureFlagsTable,
+      cacheTtlMs: service.FEATURE_FLAGS_CACHE_TTL_MS,
+    },
   };
 }

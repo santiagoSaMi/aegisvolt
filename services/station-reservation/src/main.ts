@@ -7,7 +7,7 @@ import { SERVICE_NAME, loadServiceConfig } from './config.ts';
 import { createDynamoDbClients } from './infrastructure/aws/dynamodb-client.ts';
 import { SystemClock } from './infrastructure/clock/system-clock.ts';
 import { createDynamoDbReadinessCheck } from './infrastructure/dynamodb/readiness.ts';
-import { StaticFeatureFlagReader } from './infrastructure/feature-flags/static-feature-flag-reader.ts';
+import { createFeatureFlagReader } from './infrastructure/feature-flags/feature-flag-reader.ts';
 import { createHttpApp } from './presentation/http/app.ts';
 
 function bootstrap(): void {
@@ -32,7 +32,12 @@ function bootstrap(): void {
       documentClient,
       tableName: config.dynamodb.tableName,
       clock: new SystemClock(),
-      flags: new StaticFeatureFlagReader(config.featureFlags),
+      flags: createFeatureFlagReader({
+        documentClient,
+        tableName: config.featureFlags.tableName,
+        cacheTtlMs: config.featureFlags.cacheTtlMs,
+        logger,
+      }),
       reservationPolicy: config.reservationPolicy,
     }),
     readinessCheck: createDynamoDbReadinessCheck(client, config.dynamodb.tableName),
@@ -52,6 +57,7 @@ function bootstrap(): void {
     logger.info('Servicio iniciado', {
       port: config.port,
       table: config.dynamodb.tableName,
+      flags_table: config.featureFlags.tableName,
       awsEndpoint: config.aws.endpointUrl ?? 'default',
     });
   });

@@ -69,4 +69,4 @@ El servicio administra el dinero de las flotas y debe garantizar:
 - **Negativas:**
   - Código de infraestructura duplicado entre servicios (decisión consciente).
   - Las billeteras muy concurridas se serializan por versión, lo que puede generar `503` con mucha contención; es aceptable para flotas.
-  - Hasta tener el lector de flags, `ENABLE_DYNAMIC_SURGE_PRICING` requiere reiniciar el servicio.
+  - Hasta tener el lector de flags, `ENABLE_DYNAMIC_SURGE_PRICING` requiere reiniciar el servicio. *(Resuelto en [ADR-0025](0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md): se lee de la tabla del ambiente, sin reiniciar.)*

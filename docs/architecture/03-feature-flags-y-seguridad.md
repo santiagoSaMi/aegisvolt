@@ -6,21 +6,33 @@ Cubre los puntos 10 y 11. Decisiones: [ADR-0007](../adr/0007-feature-flags-dynam
 
 ### Mecanismo
 
+- **Implementación:** [ADR-0025](../adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md). Demostración con datos de Floci: [runbook](../runbooks/feature-flags-demo.md).
 - **Almacén:** una tabla DynamoDB **por ambiente**, `aegisvolt-feature-flags-<env>`, creada por Terraform en el workspace correspondiente. El aislamiento es físico: `dev` y `prod` no comparten tabla, así que un cambio en `dev` no puede afectar a `prod`.
+- **Ambiente confiable:** cada proceso deriva su tabla de `APP_ENV`, que inyecta el despliegue (`resolveFeatureFlagsTable`). En `dev`, `test` y `prod` no se admite otra tabla: la configuración falla y el proceso no arranca. Ninguna operación recibe el ambiente como parámetro.
+- **Catálogo único:** [`packages/feature-flags/src/catalog.ts`](../../packages/feature-flags/src/catalog.ts) (descripción, servicio, valor seguro y valor inicial por ambiente).
 - **Valores iniciales:** Terraform siembra cada flag con `aws_dynamodb_table_item` usando los valores de `envs/<env>.tfvars` y `lifecycle { ignore_changes = [item] }`. Sin ese `ignore_changes`, el siguiente `terraform apply` revertiría los cambios hechos en caliente (P-13 en [09](09-analisis-especificacion.md)).
-- **Lectura:** el paquete `packages/feature-flags` expone el puerto `FeatureFlagReader.isEnabled(key)` y un adaptador DynamoDB con **caché en memoria de 5 s**. Un cambio se refleja en ≤ 5 s **sin redesplegar**. Si DynamoDB no responde, se usa el último valor conocido; si no hay ninguno, el valor seguro por defecto (`false`).
-- **Escritura:** solo por la mutación GraphQL `setFeatureFlag` (rol `platform-admins`). Escribe la flag con `version` condicional y un ítem `FlagAudit` en la misma transacción. Alternativa documentada para la demo: `scripts/flags/set.sh <env> <key> <true|false>`, que también deja auditoría.
+- **Lectura en los servicios:** los tres servicios usan `CachedFeatureFlagReader` de `packages/feature-flags`, con **caché en memoria de 5 s**. Un cambio se refleja en ≤ 5 s **sin redesplegar**. Si DynamoDB no responde, se usa el último valor conocido; si no hay ninguno, el valor seguro (`false`).
+- **Lectura en el graphql-api (`GetFeatureFlags`):** devuelve las tres flags con su origen (`STORE`, `LAST_KNOWN` o `DEFAULT`) y `degraded: true` si alguna no viene de la tabla. Exige un usuario autenticado de la plataforma.
+- **Escritura (`UpdateFeatureFlag`):**
+  - solo `platform-admins`, verificado en la capa de aplicación;
+  - solo valores booleanos de claves del catálogo;
+  - `version` condicional (`expectedVersion` opcional, `409` si no coincide);
+  - auditoría (`from`, `to`, `changedBy`, `changedAt`, `correlationId`, `environment`) en la misma transacción;
+  - la réplica que escribe invalida su caché.
+
+  En la fase GraphQL se expondrá como la mutación `setFeatureFlag`. Para la demo local, `scripts/flags/set.sh <env> <key> <true\|false>` ejecuta el mismo caso de uso contra Floci.
 
 ### Flags y su evaluación
 
 | Flag | Servicio que la evalúa | Semántica propuesta | `dev` | `test` | `prod` |
 | --- | --- | --- | --- | --- | --- |
 | `ENABLE_DYNAMIC_SURGE_PRICING` | billing-wallet | En las ventanas pico configuradas (p. ej. 17:00–21:00, America/Bogota) aplica `surgeMultiplier` (p. ej. 1,25) a la tarifa. | `true` | `true` | `false` |
-| `ENABLE_FAST_CHARGE_BOOST` | station-reservation | Si está activa, una reserva con `fastChargeBoost=true` puede tomar conectores `ultraFast` (≥ 150 kW) y obtiene un *hold* extendido (300 s en vez de 120 s). Con la flag apagada, `fastChargeBoost=true` responde `403 FAST_CHARGE_BOOST_DISABLED`. Un conector `ultraFast` sin `fastChargeBoost` responde `409 ULTRA_FAST_REQUIRES_BOOST`. Implementado en `ReservationPolicy`. | `true` | `true` | `false` |
-| `SIMULATE_CHARGER_HARDWARE_FAULT` | energy-dispatch (adaptador `SimulatedChargerAdapter`) | Fuerza `CHARGER_HARDWARE_FAULT` en la activación para demostrar el rollback de la SAGA. | `false` | `false` | `false` |
+| `ENABLE_FAST_CHARGE_BOOST` | station-reservation | Si está activa, una reserva con `fastChargeBoost=true` puede tomar conectores `ultraFast` (≥ 150 kW) y obtiene un *hold* extendido (300 s en vez de 120 s). Con la flag apagada, `fastChargeBoost=true` responde `403 FAST_CHARGE_BOOST_DISABLED`. Un conector `ultraFast` sin `fastChargeBoost` responde `409 ULTRA_FAST_REQUIRES_BOOST`. Implementado en `ReservationPolicy`. | `true` | `false` | `false` |
+| `SIMULATE_CHARGER_HARDWARE_FAULT` | energy-dispatch (adaptador `SimulatedChargerAdapter`) | Fuerza `CHARGER_HARDWARE_FAULT` en la activación para demostrar la compensación de la SAGA. | `false` | `true` | `false` |
 
-- La semántica de `ENABLE_FAST_CHARGE_BOOST` es una interpretación de una especificación ambigua (P-14).
-- `SIMULATE_CHARGER_HARDWARE_FAULT` existe en los tres ambientes, como pide §2.2, pero empieza en `false` y solo un administrador puede cambiarla, con auditoría.
+- La semántica de `ENABLE_FAST_CHARGE_BOOST` es una interpretación de una especificación ambigua (P-14). Por eso solo empieza activa en `dev`; activarla en `test` o `prod` es un cambio operativo auditado (ADR-0025).
+- `SIMULATE_CHARGER_HARDWARE_FAULT` existe en los tres ambientes, como pide §2.2. Empieza activa solo en `test`, para la demostración de §6.3, así que en `test` toda SAGA se compensa hasta que se apague. Solo un administrador puede cambiarla, con auditoría.
+- La especificación solo fija los valores de `ENABLE_DYNAMIC_SURGE_PRICING`; los de `SIMULATE_CHARGER_HARDWARE_FAULT` se definieron en la fase de feature flags.
 - El frontend muestra el estado efectivo de las flags (`query featureFlags`) y el nombre del ambiente (`query environment`) y los refresca por polling.
 
 Demostración de §6.4:

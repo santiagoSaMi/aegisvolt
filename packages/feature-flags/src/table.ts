@@ -8,10 +8,10 @@ import type { FeatureFlagKey } from './reader.ts';
  *
  * | Entidad  | PK            | SK              | Atributos                                         |
  * | -------- | ------------- | --------------- | ------------------------------------------------- |
- * | Flag     | FLAG#<key>    | META            | key, enabled, version, updatedAt, updatedBy       |
- * | FlagAudit| FLAG#<key>    | AUDIT#<ts>#<v>  | from, to, version, updatedBy, updatedAt           |
+ * | Flag     | FLAG#<key>    | META            | key, enabled, description, version, updatedAt, updatedBy |
+ * | FlagAudit| FLAG#<key>    | AUDIT#<ts>#<v>  | key, from, to, version, changedBy, changedAt, correlationId, environment |
  *
- * Único escritor: graphql-api (`setFeatureFlag`); en local, `scripts/set-flag.ts`.
+ * Único escritor: graphql-api (`UpdateFeatureFlag`, también desde su CLI local).
  * Los servicios solo leen.
  */
 export const featureFlagKeys = {

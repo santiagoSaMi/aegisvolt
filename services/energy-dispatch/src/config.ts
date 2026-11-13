@@ -5,6 +5,7 @@ import {
   type BaseConfig,
   type EnvSource,
 } from '@aegisvolt/config';
+import { resolveFeatureFlagsTable } from '@aegisvolt/feature-flags';
 import { z } from 'zod';
 
 export const SERVICE_NAME = 'energy-dispatch-service';
@@ -17,8 +18,11 @@ const tableName = z.string().regex(/^[A-Za-z0-9_.-]{3,255}$/);
 const serviceEnvSchema = z.object({
   /** `aegisvolt-dispatch-<env>` (lo crea Terraform en cada ambiente). */
   DYNAMODB_TABLE_NAME: tableName,
-  /** `aegisvolt-feature-flags-<env>`: solo lectura (ADR-0007). */
-  FEATURE_FLAGS_TABLE_NAME: tableName,
+  /**
+   * Tabla de flags del ambiente (solo lectura, ADR-0007/0025). Opcional: por
+   * defecto `aegisvolt-feature-flags-<APP_ENV>`; en dev/test/prod no admite otra.
+   */
+  FEATURE_FLAGS_TABLE_NAME: z.string().optional(),
   /** Vigencia de la caché de flags: un cambio se refleja en ≤ este tiempo. */
   FEATURE_FLAGS_CACHE_TTL_MS: ms(0, 60_000, 5_000),
   HTTP_REQUEST_TIMEOUT_MS: ms(100, 30_000, 5_000),
@@ -75,6 +79,15 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
     ]);
   }
 
+  let featureFlagsTable: string;
+  try {
+    featureFlagsTable = resolveFeatureFlagsTable(base.appEnv, service.FEATURE_FLAGS_TABLE_NAME);
+  } catch (error) {
+    throw new ConfigValidationError([
+      { variable: 'FEATURE_FLAGS_TABLE_NAME', message: (error as Error).message },
+    ]);
+  }
+
   return {
     ...base,
     http: { requestTimeoutMs: service.HTTP_REQUEST_TIMEOUT_MS },
@@ -85,7 +98,7 @@ export function loadServiceConfig(env: EnvSource): ServiceConfig {
       maxAttempts: service.DYNAMODB_MAX_ATTEMPTS,
     },
     featureFlags: {
-      tableName: service.FEATURE_FLAGS_TABLE_NAME,
+      tableName: featureFlagsTable,
       cacheTtlMs: service.FEATURE_FLAGS_CACHE_TTL_MS,
     },
     telemetry: { retentionDays: service.TELEMETRY_RETENTION_DAYS },

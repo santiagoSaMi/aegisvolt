@@ -55,7 +55,7 @@ Transiciones de la reserva: `HELD → CONFIRMED → RELEASED`, `HELD → RELEASE
 src/
   domain/           Station, ChargingConnector, Reservation, ReservationPolicy, servicios de dominio
   application/      casos de uso, puertos (repositorios, reloj, flags), reintento optimista, errores
-  infrastructure/   AWS SDK v3 (cliente con timeouts), repositorios DynamoDB, readiness, flags (provisional), reloj
+  infrastructure/   AWS SDK v3 (cliente con timeouts), repositorios DynamoDB, readiness, lector de flags (DynamoDB con caché, ADR-0025), reloj
   presentation/     Express 5: rutas y controllers delgados, validación con el contrato, middleware
                     (correlation_id, logs, timeout, errores → problem+json)
   config.ts         configuración validada (Zod)
@@ -99,7 +99,7 @@ REQUIRE_INTEGRATION=true pnpm test:integration                           # falla
 
 ## Limitaciones y pendientes
 
-- **Flags:** `ENABLE_FAST_CHARGE_BOOST` se lee de configuración con `StaticFeatureFlagReader`, de forma **provisional**. El lector de la tabla de flags (ADR-0007) implementará el mismo puerto.
+- **Flags:** `ENABLE_FAST_CHARGE_BOOST` se lee de `aegisvolt-feature-flags-<env>` (tabla derivada de `APP_ENV`, caché de 5 s, valor seguro `false`). Cambiarla no requiere reiniciar ([ADR-0025](../../docs/adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md)). Empieza activa solo en `dev`.
 - **Autenticación:** no hay autorización por rol en `PUT /v1/stations`. El servicio es interno (`ClusterIP` + NetworkPolicies) y el alta administrativa se expone a través del GraphQL API (ADR-0008).
 - **Consultas por ciudad:** usan un GSI de consistencia eventual. La disponibilidad listada puede llevar un retraso breve, pero la reserva siempre se decide con lectura consistente y escritura condicional.
 - **Tabla:** en los ambientes la crea Terraform (fase de IaC); `db:create-local-table` es solo para desarrollo.

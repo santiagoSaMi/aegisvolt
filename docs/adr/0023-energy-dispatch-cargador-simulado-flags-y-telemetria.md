@@ -51,7 +51,7 @@ Así la falla queda clasificable y trazable.
 - **La flag la evalúa el adaptador simulado, no el dominio ni el caso de uso**: es una propiedad del cargador simulado. Se lee en cada orden, así que cambiarla en la tabla del ambiente cambia el comportamiento en ≤ TTL sin redesplegar. Esto se verificó contra Floci y en el servicio en ejecución.
 - **Herramienta local:**
   - `flags:create-local-table` crea la tabla y siembra las flags en `false`;
-  - `flags:set` escribe con versión condicional más un ítem de auditoría en la misma transacción;
+  - `flags:set` escribe con versión condicional más un ítem de auditoría en la misma transacción *(sustituido en [ADR-0025](0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md) por la CLI del graphql-api, que usa `UpdateFeatureFlag`)*;
   - el envoltorio `scripts/flags/set.sh` la invoca.
 
   Ambos scripts rechazan endpoints que no sean locales. En los ambientes, el único escritor sigue siendo `setFeatureFlag` del GraphQL API.

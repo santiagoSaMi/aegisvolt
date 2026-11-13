@@ -39,7 +39,7 @@ src/
   domain/           Wallet, Money, WalletTransaction, Debit, Refund, TopUp, OperationAudit, PricingPolicy
   application/      DebitWallet, RefundWallet, GetWalletBalance, VerifyFunds, GetTransactionHistory,
                     OpenWallet, TopUpWallet, GetDebit · puertos · reintento optimista
-  infrastructure/   AWS SDK v3 con timeouts, repositorio DynamoDB (transacciones), readiness, flags (provisional)
+  infrastructure/   AWS SDK v3 con timeouts, repositorio DynamoDB (transacciones), readiness, lector de flags (DynamoDB con caché, ADR-0025)
   presentation/     Express 5: rutas delgadas, validación con el contrato, middleware común
   config.ts · composition.ts · main.ts
 scripts/create-local-table.ts   tabla en Floci para desarrollo (rechaza endpoints no locales)
@@ -71,7 +71,7 @@ pnpm --filter @aegisvolt/billing-wallet-service test:integration   # DynamoDB de
 
 ## Limitaciones y pendientes
 
-- **Flags:** `ENABLE_DYNAMIC_SURGE_PRICING` es **provisional**: se lee de configuración hasta tener el lector de flags (ADR-0007).
+- **Flags:** `ENABLE_DYNAMIC_SURGE_PRICING` se lee de `aegisvolt-feature-flags-<env>` (tabla derivada de `APP_ENV`, caché de 5 s, valor seguro `false`). Un cambio se refleja en ≤ 5 s sin reiniciar ([runbook](../../docs/runbooks/feature-flags-demo.md)).
 - **Autorización:** no hay autorización por rol en recargas ni aperturas. El servicio es interno; el GraphQL API aplica los roles (ADR-0008).
 - **Verificación de fondos:** es una consulta y no retiene saldo (P-08). El débito vuelve a comprobarlo de forma atómica.
 - **Contenedor:** el Dockerfile llega en la fase de Kubernetes; la tabla de cada ambiente, en la fase de IaC.

@@ -21,7 +21,7 @@ import {
 import { DynamoDbWalletRepository } from '../../src/infrastructure/dynamodb/dynamodb-wallet-repository.ts';
 import { createDynamoDbReadinessCheck } from '../../src/infrastructure/dynamodb/readiness.ts';
 import { GSI1, keys } from '../../src/infrastructure/dynamodb/table.ts';
-import { StaticFeatureFlagReader } from '../../src/infrastructure/feature-flags/static-feature-flag-reader.ts';
+import { StaticFeatureFlagReader } from '../support/static-feature-flag-reader.ts';
 import { createHttpApp } from '../../src/presentation/http/app.ts';
 import { DEBIT_AMOUNT, PRICING, START } from '../support/fixtures.ts';
 import { FixedClock } from '../support/in-memory-wallet-repository.ts';

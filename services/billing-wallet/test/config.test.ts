@@ -22,7 +22,21 @@ describe('loadServiceConfig', () => {
       peakWindows: [{ startMinute: 1020, endMinute: 1260 }],
       utcOffsetMinutes: -300,
     });
-    expect(config.featureFlags.ENABLE_DYNAMIC_SURGE_PRICING).toBe(false);
+    expect(config.featureFlags).toEqual({
+      tableName: 'aegisvolt-feature-flags-local',
+      cacheTtlMs: 5_000,
+    });
+  });
+
+  it('la tabla de flags es la del ambiente del despliegue (sin redesplegar para cambiar flags)', () => {
+    expect(() =>
+      loadServiceConfig({
+        ...LOCAL_ENV,
+        APP_ENV: 'prod',
+        AWS_ENDPOINT_URL: undefined,
+        FEATURE_FLAGS_TABLE_NAME: 'aegisvolt-feature-flags-dev',
+      }),
+    ).toThrow(/FEATURE_FLAGS_TABLE_NAME/);
   });
 
   it('en local exige un endpoint de AWS explícito', () => {

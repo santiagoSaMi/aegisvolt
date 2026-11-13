@@ -134,7 +134,7 @@ El diagrama de estados de la SAGA está en [02-saga.md](02-saga.md#7-máquina-de
 | Value Objects | `FeatureFlagKey` (`MAYÚSCULAS_CON_GUIONES_BAJOS`), `ActorId` | |
 | Registro | `FlagChange` | Auditoría (`from`, `to`, `version`, `changedBy`, `changedAt`). |
 
-El ambiente no es un atributo de la flag: cada ambiente tiene su propia tabla ([ADR-0007](../adr/0007-feature-flags-dynamodb-por-ambiente.md)).
+El ambiente no es un atributo de la flag: cada ambiente tiene su propia tabla ([ADR-0007](../adr/0007-feature-flags-dynamodb-por-ambiente.md)). La capa de aplicación (`GetFeatureFlags`, `UpdateFeatureFlag`) añade a cada cambio el `correlation_id` y el ambiente del despliegue, y aplica la autorización (`flagsPolicy`): leer requiere un usuario de la plataforma, escribir requiere `platform-admins` ([ADR-0025](../adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md)).
 
 ## Correspondencia con los conceptos pedidos
 

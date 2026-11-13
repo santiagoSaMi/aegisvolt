@@ -10,7 +10,7 @@ import {
   type DebitWalletCommand,
 } from '../../src/application/index.ts';
 import { PricingPolicy, type PricingPolicyConfig } from '../../src/domain/index.ts';
-import { StaticFeatureFlagReader } from '../../src/infrastructure/feature-flags/static-feature-flag-reader.ts';
+import { StaticFeatureFlagReader } from './static-feature-flag-reader.ts';
 import { FixedClock, InMemoryWalletRepository } from './in-memory-wallet-repository.ts';
 
 /** 15:00 UTC = 10:00 en Bogotá (fuera de hora pico). */

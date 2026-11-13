@@ -2,6 +2,18 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — feature-flags 1.1.0
+
+Cambios al implementar el sistema de flags (ADR-0025). Todos compatibles (*minor*):
+
+- `featureFlagStateSchema.description` opcional.
+- `FLAG_ENVIRONMENTS` y `flagEnvironmentSchema`.
+- Operaciones del graphql-api:
+  - `featureFlagViewSchema` y `featureFlagsViewSchema` (con `source`, `degraded` y `environment`);
+  - `updateFeatureFlagRequestSchema` (sin campo de ambiente);
+  - `updateFeatureFlagResponseSchema` y `featureFlagChangeViewSchema` (auditoría).
+- Catálogo `ERROR_CODES` con `FEATURE_FLAG_NOT_FOUND` y `FEATURE_FLAG_VERSION_CONFLICT`.
+
 ## 2026-11-13 — saga-orchestrator 1.1.0
 
 Cambios al implementar el orquestador (ADR-0024):
