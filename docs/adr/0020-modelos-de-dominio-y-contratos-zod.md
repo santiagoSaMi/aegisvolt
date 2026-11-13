@@ -25,7 +25,7 @@ Las reglas vigentes:
    - servicios de dominio como funciones puras con *outcomes* explícitos;
    - tombstones como entidades propias.
    El dominio no conoce flags: recibe booleanos (`fastChargeBoostEnabled`, `surgePricingEnabled`) o el resultado de un puerto (`ChargerActivationResult`).
-3. **Zod solo en los bordes.** `packages/contracts` contiene los esquemas Zod de los contratos públicos. Más adelante los usarán los adaptadores `interfaces/` (validar peticiones) e `infrastructure/` (validar respuestas). El dominio no usa Zod.
+3. **Zod solo en los bordes.** `packages/contracts` contiene los esquemas Zod de los contratos públicos. Más adelante los usarán los adaptadores de `presentation/` (validar peticiones) e `infrastructure/` (validar respuestas). El dominio no usa Zod.
 4. **Formato de los contratos:**
    - un módulo por API y versión (`stationReservationV1`, …), con `API`, `paths`, esquemas, vocabulario, `ERROR_CODES` y `problemSchema`;
    - identificadores con prefijo;

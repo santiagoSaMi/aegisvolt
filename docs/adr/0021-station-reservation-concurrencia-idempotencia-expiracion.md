@@ -51,7 +51,7 @@ La fase pide además los estados `AVAILABLE`, `RESERVED` y `OCCUPIED`, una capa 
 - **Express 5.3.0:** los errores de handlers async llegan al middleware de errores sin envoltorios.
 - **Controllers delgados:** validan con los esquemas Zod del contrato, delegan y mapean con `z.input` del esquema.
 - **Middleware:** `correlation_id` (ADR-0009), log por petición, presupuesto de tiempo (`503`) y errores → `problem+json` sin filtrar detalles en `5xx`.
-- **Nombre:** la capa de entrada de este servicio se llama `presentation`, como pide la fase. dependency-cruiser la trata igual que `interfaces`, el nombre que usan por ahora los demás servicios.
+- **Nombre:** la capa de entrada se llama `presentation`, como pide la fase. Después se unificó en todas las unidades desplegables, en CLAUDE.md y en las reglas de dependency-cruiser; antes se llamaba `interfaces`.
 
 ### Configuración e infraestructura
 - **Endpoint AWS** solo por `AWS_ENDPOINT_URL` (Zod), obligatorio con `APP_ENV=local`.

@@ -3,7 +3,7 @@
 import { createLogger } from '@aegisvolt/logger';
 
 import { SERVICE_NAME, loadServiceConfig } from './config.ts';
-import { createHealthServer } from './interfaces/http/health-server.ts';
+import { createHealthServer } from './presentation/http/health-server.ts';
 
 function bootstrap(): void {
   const config = loadServiceConfig(process.env);

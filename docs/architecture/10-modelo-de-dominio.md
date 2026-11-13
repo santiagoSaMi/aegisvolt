@@ -52,13 +52,17 @@ stateDiagram-v2
 | Tipo | Elemento | Invariantes / reglas |
 | --- | --- | --- |
 | Agregado | **Wallet** | Saldo ≥ 0 y moneda fija. `debit` sin saldo suficiente → `INSUFFICIENT_FUNDS`; importes de 0 rechazados. |
-| Entidad | **WalletTransaction** | Libro mayor *append-only*: importe > 0 en la misma moneda que el saldo resultante. `DEBIT`/`REFUND` referencian `sagaId` + `debitId`; `TOP_UP` referencia `topUpId`. |
-| Agregado | **Debit** | Términos inmutables para la idempotencia; el rechazo por fondos se persiste para responder igual en el reintento. |
-| Entidad | DebitTombstone | Bloquea un cobro tardío con un id ya compensado. |
-| Value Objects | `Money` (unidades menores enteras, ISO 4217, nunca negativo, no mezcla monedas), `Energy` (Wh enteros, ≤ 500 kWh) | |
+| Entidad | **WalletTransaction** | Libro mayor *append-only*: importe > 0 en la misma moneda que el saldo resultante. Id derivado de la operación (`wtx_debit-…`, `wtx_refund-…`, `wtx_topup-…`): una operación produce un solo movimiento. `DEBIT` referencia `sagaId` + `debitId`; `REFUND` además `refundId`; `TOP_UP` referencia `topUpId`. Lleva `OperationAudit`. |
+| Agregado | **Debit** | Términos inmutables para la idempotencia; el rechazo por fondos se persiste para responder igual en el reintento. `REFUNDED` ⇔ tiene `refundId`. Solo la SAGA dueña lo compensa (`DEBIT_MISMATCH`). |
+| Entidad | **Refund** | Compensación como **operación de negocio propia**: id `rfd_<valor del débito>` (uno por débito), motivo, importe y auditoría; genera su movimiento `REFUND`. |
+| Entidad | **TopUp** | Recarga idempotente por `topUpId`; solo suma un importe positivo (nunca fija el saldo). |
+| Entidad | DebitTombstone | Bloquea un cobro tardío con un id ya compensado; registra la SAGA y la auditoría de quien lo pidió. |
+| Value Objects | `Money` (unidades menores enteras, ISO 4217, nunca negativo, no mezcla monedas), `Energy` (Wh enteros, ≤ 500 kWh), `OperationAudit` (`correlationId` UUID + clave idempotente) | |
 | Política | `PricingPolicy` | Importe = tarifa por clase de potencia × energía × *surge*, aplicado solo con la flag activa y en hora pico local. Se calcula con `BigInt` y redondeo half-up. |
-| Servicios | `debitEstimatedCharge` (`DEBITED` \| `REJECTED_INSUFFICIENT_FUNDS` \| `REPLAYED`), `refundDebit` (`REFUNDED` \| `ALREADY_REFUNDED` \| `NOTHING_TO_REFUND` \| `VOIDED`), `topUpWallet` | |
-| Errores | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `DEBIT_VOIDED`, `IDEMPOTENCY_CONFLICT`, `INVALID_DEBIT_TRANSITION`, `INVALID_VALUE` | |
+| Servicios | `debitEstimatedCharge` (`DEBITED` \| `REJECTED_INSUFFICIENT_FUNDS` \| `REPLAYED`), `refundDebit` (`REFUNDED` \| `ALREADY_REFUNDED` \| `NOTHING_TO_REFUND` \| `VOIDED`), `topUpWallet` (`APPLIED` \| `REPLAYED`) | |
+| Errores | `INSUFFICIENT_FUNDS`, `CURRENCY_MISMATCH`, `DEBIT_VOIDED`, `DEBIT_MISMATCH`, `IDEMPOTENCY_CONFLICT`, `INVALID_DEBIT_TRANSITION`, `INVALID_VALUE` | |
+
+Persistencia, atomicidad y concurrencia del servicio: [ADR-0022](../adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md).
 
 ```mermaid
 stateDiagram-v2

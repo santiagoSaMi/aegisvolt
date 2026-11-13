@@ -3,10 +3,10 @@ import {
   Energy,
   FleetId,
   Money,
+  OperationAudit,
   PricingPolicy,
   SagaId,
   Wallet,
-  WalletTransactionId,
   type DebitTerms,
 } from '../../src/domain/index.ts';
 
@@ -17,9 +17,9 @@ export const PEAK = new Date('2026-11-13T23:30:00.000Z');
 
 export const FLEET_ID = FleetId.parse('fleet_001');
 export const SAGA_ID = SagaId.parse('saga_3f2c1e5a-1b2c-4d3e-8f90-123456789abc');
+export const OTHER_SAGA_ID = SagaId.parse('saga_00000000-0000-4000-8000-000000000009');
 export const DEBIT_ID = DebitId.parse('dbt_3f2c1e5a-1b2c-4d3e-8f90-123456789abc');
-export const TX_ID = WalletTransactionId.parse('wtx_00000000-0000-4000-8000-000000000001');
-export const TX_ID_2 = WalletTransactionId.parse('wtx_00000000-0000-4000-8000-000000000002');
+export const AUDIT = OperationAudit.of('11111111-2222-4333-8444-555555555555', DEBIT_ID);
 
 export const cop = (amountMinor: number): Money => Money.of(amountMinor, 'COP');
 

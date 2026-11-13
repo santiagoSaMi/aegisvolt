@@ -11,6 +11,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | Estructura del monorepo | Lista ([ADR-0018](docs/adr/0018-toolchain-monorepo-pnpm-node-typescript.md), [ADR-0019](docs/adr/0019-paquetes-transversales-logger-config-contracts.md)) |
 | Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
 | station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
+| billing-wallet-service | Implementado con libro mayor atómico, reembolsos como operación propia y pruebas de integración en Floci ([README](services/billing-wallet/README.md), [ADR-0022](docs/adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md)) |
 
 ## Requisitos
 
@@ -87,7 +88,7 @@ src/
   domain/          # sin dependencias externas ni de otras capas
   application/     # casos de uso y puertos; no conoce adaptadores
   infrastructure/  # adaptadores de salida (DynamoDB, HTTP clients…)
-  interfaces/      # adaptadores de entrada (HTTP); hoy solo las probes /health/live y /health/ready
+  presentation/    # adaptadores de entrada (HTTP)
   config.ts        # configuración validada
   main.ts          # composition root
 test/

@@ -5,7 +5,7 @@
  * - Cada app/servicio es una unidad desplegable: no importa código de otra.
  * - Los paquetes transversales (packages/*) no dependen de apps ni servicios.
  * - Arquitectura hexagonal dentro de cada app/servicio:
- *     domain  <-  application  <-  interfaces|presentation / infrastructure  <-  main.ts
+ *     domain  <-  application  <-  presentation / infrastructure  <-  main.ts
  * - El código de producción no depende de devDependencies ni de módulos sin declarar.
  *
  * @type {import('dependency-cruiser').IConfiguration}
@@ -39,11 +39,11 @@ module.exports = {
       name: 'domain-is-isolated',
       severity: 'error',
       comment:
-        'El dominio no depende de application, infrastructure, interfaces, main ni de los ' +
+        'El dominio no depende de application, infrastructure, presentation, main ni de los ' +
         'paquetes transversales (pnpm los resuelve como rutas locales packages/*).',
       from: { path: '^(apps|services)/[^/]+/src/domain/' },
       to: {
-        path: '^(apps|services)/[^/]+/src/(application|infrastructure|interfaces|presentation)/|/src/main\\.ts$|^packages/',
+        path: '^(apps|services)/[^/]+/src/(application|infrastructure|presentation)/|/src/main\\.ts$|^packages/',
       },
     },
     {
@@ -59,18 +59,17 @@ module.exports = {
       comment: 'Los casos de uso dependen de puertos, nunca de adaptadores concretos.',
       from: { path: '^(apps|services)/[^/]+/src/application/' },
       to: {
-        path: '^(apps|services)/[^/]+/src/(infrastructure|interfaces|presentation)/|/src/main\\.ts$',
+        path: '^(apps|services)/[^/]+/src/(infrastructure|presentation)/|/src/main\\.ts$',
       },
     },
     {
       name: 'adapters-do-not-depend-on-each-other',
       severity: 'error',
-      comment:
-        'interfaces/presentation (entrada) e infrastructure (salida) se conectan solo en main.ts.',
+      comment: 'presentation (entrada) e infrastructure (salida) se conectan solo en main.ts.',
       // Tres grupos ($1 tipo, $2 unidad, $3 capa): dentro de la misma capa sí se importa.
-      from: { path: '^(apps|services)/([^/]+)/src/(interfaces|presentation|infrastructure)/' },
+      from: { path: '^(apps|services)/([^/]+)/src/(presentation|infrastructure)/' },
       to: {
-        path: '^(apps|services)/[^/]+/src/(interfaces|presentation|infrastructure)/',
+        path: '^(apps|services)/[^/]+/src/(presentation|infrastructure)/',
         pathNot: '^$1/$2/src/$3/',
       },
     },

@@ -180,6 +180,38 @@ describe('billing-wallet v1', () => {
 
   it('INSUFFICIENT_FUNDS es 422 (definitivo, no se reintenta)', () => {
     expect(api.ERROR_CODES.INSUFFICIENT_FUNDS).toBe(422);
+    expect(api.ERROR_CODES.DEBIT_MISMATCH).toBe(409);
+    expect(api.API.version).toBe('1.1.0');
+  });
+
+  it('funds-check convierte la query y valida rangos', () => {
+    expect(api.fundsCheckQuerySchema.parse({ energyKwh: '32.5', connectorPowerKw: '150' })).toEqual(
+      { energyKwh: 32.5, connectorPowerKw: 150 },
+    );
+    expect(
+      api.fundsCheckQuerySchema.safeParse({ energyKwh: '0', connectorPowerKw: '50' }).success,
+    ).toBe(false);
+  });
+
+  it('los movimientos del libro mayor son auditables (operación, correlación y clave)', () => {
+    const entry = {
+      transactionId: `wtx_refund-${UUID}`,
+      fleetId: ids.fleetId,
+      type: 'REFUND',
+      amount: { amountMinor: 100, currency: 'COP' },
+      balanceAfter: { amountMinor: 100, currency: 'COP' },
+      operationId: `rfd_${UUID}`,
+      sagaId: ids.sagaId,
+      debitId: ids.debitId,
+      refundId: `rfd_${UUID}`,
+      correlationId: UUID,
+      idempotencyKey: `rfd_${UUID}`,
+      occurredAt: NOW,
+    };
+    expect(api.walletTransactionViewSchema.safeParse(entry).success).toBe(true);
+    expect(
+      api.walletTransactionViewSchema.safeParse({ ...entry, correlationId: undefined }).success,
+    ).toBe(false);
   });
 });
 

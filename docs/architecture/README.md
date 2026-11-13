@@ -73,5 +73,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0019](../adr/0019-paquetes-transversales-logger-config-contracts.md) | Paquetes transversales: logger (pino), config (zod) y contracts | Aceptado |
 | [0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md) | Modelos de dominio por bounded context y contratos con Zod | Aceptado |
 | [0021](../adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md) | station-reservation: concurrencia, idempotencia, expiración y presentación | Aceptado |
+| [0022](../adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md) | billing-wallet: libro mayor atómico, idempotencia y reembolso como operación propia | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

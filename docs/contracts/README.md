@@ -5,7 +5,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 | Contrato | Módulo | Versión | Proveedor | Consumidores |
 | --- | --- | --- | --- | --- |
 | station-reservation | `stationReservationV1` | 1.1.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
-| billing-wallet | `billingWalletV1` | 1.0.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
+| billing-wallet | `billingWalletV1` | 1.1.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
 | energy-dispatch | `energyDispatchV1` | 1.0.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones y telemetría) |
 | saga-orchestrator | `sagaOrchestratorV1` | 1.0.0 | saga-orchestrator-service | graphql-api |
 | feature-flags (datos, no HTTP) | `featureFlagsV1` | 1.0.0 | graphql-api (único escritor) | los tres servicios (lectura) |
@@ -44,7 +44,8 @@ Cada servicio tiene su propio modelo en `src/domain/`. Las pruebas `test/domain/
 | Débito | `dbt` | orquestador, pre-generado | `dbt_<uuid>` |
 | Sesión de carga | `ses` | orquestador, pre-generado | `ses_<uuid>` |
 | Recarga | `tup` | graphql-api | `tup_<uuid>` |
-| Movimiento de billetera | `wtx` | billing-wallet | `wtx_<uuid>` |
+| Movimiento de billetera | `wtx` | billing-wallet, derivado de la operación | `wtx_debit-<valor>`, `wtx_refund-<valor>`, `wtx_topup-<valor>` |
+| Reembolso | `rfd` | billing-wallet, uno por débito | `rfd_<valor del débito>` |
 
 `correlation_id` e `idempotency-key` son UUID sin prefijo.
 
@@ -97,15 +98,23 @@ Si los conflictos de concurrencia persisten tras 3 intentos, la respuesta es `50
 
 ## billing-wallet v1
 
+Versión 1.1.0, implementada en [billing-wallet-service](../../services/billing-wallet/README.md).
+
 | Operación | Petición | Respuesta | Errores de negocio |
 | --- | --- | --- | --- |
-| `GET /v1/wallets/{fleetId}` | — | `walletViewSchema` | `404 WALLET_NOT_FOUND` |
-| `GET /v1/wallets/{fleetId}/transactions?limit=&cursor=` | `listWalletTransactionsQuerySchema` | `{items[], nextCursor?}` | `404 WALLET_NOT_FOUND` |
-| `PUT /v1/debits/{debitId}` (SAGA paso 2) | `debitRequestSchema` `{sagaId, fleetId, energyKwh, connectorPowerKw}`; el importe lo calcula el servicio | `debitViewSchema` (`amount`, `pricing.{tariffMinorPerKwh, surgeMultiplierBasisPoints, surgeApplied}`) | `422 INSUFFICIENT_FUNDS`, `409 DEBIT_VOIDED`, `409 IDEMPOTENCY_CONFLICT`, `422 CURRENCY_MISMATCH` |
-| `POST /v1/debits/{debitId}/refund` (compensación) | `{reason}` | `{debitId, status, outcome: REFUNDED \| ALREADY_REFUNDED \| NOTHING_TO_REFUND \| VOIDED}` | `404 DEBIT_NOT_FOUND` no aplica: un débito inexistente responde `VOIDED` |
-| `PUT /v1/wallets/{fleetId}/top-ups/{topUpId}` (admin) | `{amount}` (> 0) | `{wallet, transaction}` | `422 CURRENCY_MISMATCH` |
+| `PUT /v1/wallets/{fleetId}` (abrir) | `{}`: saldo 0 en la moneda configurada; el cliente nunca fija el saldo | `201` / `200` `walletViewSchema` | — |
+| `GET /v1/wallets/{fleetId}` (saldo) | — | `walletViewSchema` | `404 WALLET_NOT_FOUND` |
+| `GET /v1/wallets/{fleetId}/funds-check?energyKwh=&connectorPowerKw=` | `fundsCheckQuerySchema` | `fundsCheckViewSchema` (`sufficient`, `required`, `available`, `pricing`); no retiene fondos | `404 WALLET_NOT_FOUND` |
+| `GET /v1/wallets/{fleetId}/transactions?limit=&cursor=` | `listWalletTransactionsQuerySchema` | `{items[], nextCursor?}`: cada movimiento con `operationId`, `sagaId`, `correlationId`, `idempotencyKey` | `404 WALLET_NOT_FOUND`, `400` (cursor inválido) |
+| `PUT /v1/debits/{debitId}` (SAGA paso 2) | `debitRequestSchema` `{sagaId, fleetId, energyKwh, connectorPowerKw}`; el importe lo calcula el servicio | `201`/`200` `debitViewSchema` (`amount`, `pricing`) | `422 INSUFFICIENT_FUNDS`, `409 DEBIT_VOIDED`, `409 IDEMPOTENCY_CONFLICT`, `404 WALLET_NOT_FOUND` |
+| `POST /v1/debits` + `idempotency-key` | `createDebitRequestSchema` (mismo cuerpo) | `201`/`200`, `location: /v1/debits/dbt_<clave>` | iguales que el `PUT` |
+| `GET /v1/debits/{debitId}` | — | `debitViewSchema` (`refundId` si fue reembolsado) | `404 DEBIT_NOT_FOUND`, `409 DEBIT_VOIDED` |
+| `POST /v1/debits/{debitId}/refund` (compensación; `idempotency-key` opcional) | `{reason}` | `{debitId, status, outcome: REFUNDED \| ALREADY_REFUNDED \| NOTHING_TO_REFUND \| VOIDED, refundId?}` | `409 DEBIT_MISMATCH` (`x-saga-id` no es la SAGA del débito). Un débito inexistente responde `VOIDED`, no 404 |
+| `PUT /v1/wallets/{fleetId}/top-ups/{topUpId}` (admin) | `{amount}` (> 0) | `201`/`200` `{wallet, transaction}` | `422 CURRENCY_MISMATCH`, `409 IDEMPOTENCY_CONFLICT` (otro importe) |
 
-Estados del débito: `DEBITED | REFUNDED | REJECTED_INSUFFICIENT_FUNDS | VOIDED`. Movimientos de billetera: `DEBIT | REFUND | TOP_UP`.
+- **Estados del débito:** `DEBITED | REFUNDED | REJECTED_INSUFFICIENT_FUNDS | VOIDED`.
+- **Movimientos de billetera:** `DEBIT | REFUND | TOP_UP`.
+- **Ids:** los reembolsos usan el prefijo `rfd_`, uno por débito (`rfd_<valor del débito>`).
 
 ## energy-dispatch v1
 

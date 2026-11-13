@@ -8,6 +8,7 @@ export type SagaId = Brand<string, 'SagaId'>;
 export type DebitId = Brand<string, 'DebitId'>;
 export type TopUpId = Brand<string, 'TopUpId'>;
 export type WalletTransactionId = Brand<string, 'WalletTransactionId'>;
+export type RefundId = Brand<string, 'RefundId'>;
 
 const ID_VALUE = '[a-z0-9][a-z0-9-]{0,62}';
 
@@ -41,9 +42,34 @@ export const TopUpId = {
     return raw as TopUpId;
   },
 };
+export const RefundId = {
+  parse: (raw: string): RefundId => {
+    assertId('rfd', 'refundId', raw);
+    return raw as RefundId;
+  },
+  /**
+   * El reembolso de un débito tiene un id determinista (`rfd_<valor del débito>`):
+   * un débito solo puede reembolsarse una vez y el id lo hace explícito.
+   */
+  forDebit: (debitId: DebitId): RefundId => RefundId.parse(`rfd_${valueOf(debitId)}`),
+};
+
+export type LedgerOperationKind = 'debit' | 'refund' | 'topup';
+
 export const WalletTransactionId = {
   parse: (raw: string): WalletTransactionId => {
     assertId('wtx', 'transactionId', raw);
     return raw as WalletTransactionId;
   },
+  /**
+   * Id del movimiento derivado de la operación que lo origina
+   * (`wtx_debit-<valor>`): cada operación produce exactamente un movimiento.
+   */
+  forOperation: (kind: LedgerOperationKind, operationId: string): WalletTransactionId =>
+    WalletTransactionId.parse(`wtx_${kind}-${valueOf(operationId)}`),
 };
+
+/** Parte del id tras el prefijo (`dbt_abc` → `abc`). */
+function valueOf(id: string): string {
+  return id.slice(id.indexOf('_') + 1);
+}

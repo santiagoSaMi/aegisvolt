@@ -1,15 +1,18 @@
-import { InvalidValueError } from '../shared/domain-error.ts';
-import type { DebitId, TopUpId, WalletTransactionId } from '../shared/identifiers.ts';
 import type { Money } from '../money/money.ts';
 import type { PricingPolicy } from '../pricing/pricing-policy.ts';
+import { InvalidValueError } from '../shared/domain-error.ts';
+import type { DebitId, SagaId, TopUpId } from '../shared/identifiers.ts';
+import type { OperationAudit } from '../shared/operation-audit.ts';
 import { Debit, DebitTombstone, type DebitTerms } from './debit.ts';
-import { DebitTermsMismatchError, DebitVoidedError } from './errors.ts';
+import { DebitTermsMismatchError, DebitVoidedError, TopUpTermsMismatchError } from './errors.ts';
+import { Refund, type RefundReason } from './refund.ts';
+import { TopUp } from './top-up.ts';
 import type { Wallet } from './wallet.ts';
 import { WalletTransaction } from './wallet-transaction.ts';
 
 /**
  * Servicios de dominio de la billetera. Funciones puras: la aplicación persiste
- * billetera + débito + entrada del libro mayor en una sola transacción.
+ * el resultado en UNA transacción (saldo + operación + movimiento del libro mayor).
  */
 
 export type DebitResult =
@@ -22,16 +25,21 @@ export type DebitResult =
   | { readonly kind: 'REJECTED_INSUFFICIENT_FUNDS'; readonly debit: Debit }
   | { readonly kind: 'REPLAYED'; readonly debit: Debit };
 
-/** Paso 2 de la SAGA: cobra el importe estimado (PUT idempotente por `debitId`). */
+/**
+ * Paso 2 de la SAGA: cobra el importe estimado (idempotente por `debitId`).
+ * - El importe sale de la política de precios, nunca del cliente.
+ * - Sin saldo suficiente no hay movimiento: se registra el débito RECHAZADO.
+ * - Repetir con los mismos términos devuelve el débito original (no cobra dos veces).
+ */
 export function debitEstimatedCharge(input: {
   debitId: DebitId;
-  transactionId: WalletTransactionId;
   terms: DebitTerms;
   wallet: Wallet;
   existing: Debit | undefined;
   tombstone: DebitTombstone | undefined;
   pricing: PricingPolicy;
   surgePricingEnabled: boolean;
+  audit: OperationAudit;
   now: Date;
 }): DebitResult {
   if (input.tombstone !== undefined) {
@@ -57,21 +65,21 @@ export function debitEstimatedCharge(input: {
   if (!input.wallet.canAfford(quote.amount)) {
     return {
       kind: 'REJECTED_INSUFFICIENT_FUNDS',
-      debit: Debit.rejected(input.debitId, input.terms, quote, input.now),
+      debit: Debit.rejected(input.debitId, input.terms, quote, input.audit, input.now),
     };
   }
 
   const wallet = input.wallet.debit(quote.amount, input.now);
-  const debit = Debit.applied(input.debitId, input.terms, quote, input.now);
+  const debit = Debit.applied(input.debitId, input.terms, quote, input.audit, input.now);
   const transaction = WalletTransaction.record(
     {
-      id: input.transactionId,
       fleetId: wallet.fleetId,
       amount: quote.amount,
       balanceAfter: wallet.balance,
       occurredAt: input.now,
     },
     { type: 'DEBIT', sagaId: input.terms.sagaId, debitId: debit.id },
+    input.audit,
   );
   return { kind: 'DEBITED', wallet, debit, transaction };
 }
@@ -81,28 +89,35 @@ export type RefundResult =
       readonly outcome: 'REFUNDED';
       readonly wallet: Wallet;
       readonly debit: Debit;
+      readonly refund: Refund;
       readonly transaction: WalletTransaction;
     }
   | { readonly outcome: 'ALREADY_REFUNDED' | 'NOTHING_TO_REFUND'; readonly debit: Debit }
   | { readonly outcome: 'VOIDED'; readonly tombstone: DebitTombstone };
 
 /**
- * Compensación: reembolsa un débito. Idempotente:
- * - REFUNDED: devuelve el importe y registra una entrada REFUND.
+ * Compensación: reembolsa un débito como operación propia (Refund + movimiento REFUND).
+ * - Solo la SAGA dueña del débito puede pedirlo (DEBIT_MISMATCH).
  * - ALREADY_REFUNDED: no toca el saldo (evita el reembolso doble, §6.3).
  * - NOTHING_TO_REFUND: el débito fue rechazado; no hubo cobro.
  * - VOIDED: el débito no existe; tombstone que bloquea un cobro tardío.
  */
 export function refundDebit(input: {
   debitId: DebitId;
-  transactionId: WalletTransactionId;
+  requestedBy: SagaId;
   debit: Debit | undefined;
   wallet: Wallet | undefined;
+  reason: RefundReason;
+  audit: OperationAudit;
   now: Date;
 }): RefundResult {
   if (input.debit === undefined) {
-    return { outcome: 'VOIDED', tombstone: DebitTombstone.create(input.debitId, input.now) };
+    return {
+      outcome: 'VOIDED',
+      tombstone: DebitTombstone.create(input.debitId, input.requestedBy, input.audit, input.now),
+    };
   }
+  input.debit.assertRequestedBy(input.requestedBy);
   if (input.debit.status === 'REFUNDED') {
     return { outcome: 'ALREADY_REFUNDED', debit: input.debit };
   }
@@ -113,39 +128,63 @@ export function refundDebit(input: {
     throw new InvalidValueError('wallet', 'se requiere la billetera de la flota del débito');
   }
 
-  const wallet = input.wallet.credit(input.debit.amount, input.now);
-  const debit = input.debit.markRefunded(input.now);
+  const refund = Refund.of(input.debit, input.reason, input.audit, input.now);
+  const wallet = input.wallet.credit(refund.amount, input.now);
+  const debit = input.debit.markRefunded(refund.id, input.now);
   const transaction = WalletTransaction.record(
     {
-      id: input.transactionId,
       fleetId: wallet.fleetId,
-      amount: debit.amount,
+      amount: refund.amount,
       balanceAfter: wallet.balance,
       occurredAt: input.now,
     },
-    { type: 'REFUND', sagaId: debit.terms.sagaId, debitId: debit.id },
+    { type: 'REFUND', sagaId: debit.terms.sagaId, debitId: debit.id, refundId: refund.id },
+    input.audit,
   );
-  return { outcome: 'REFUNDED', wallet, debit, transaction };
+  return { outcome: 'REFUNDED', wallet, debit, refund, transaction };
 }
 
-/** Recarga administrativa de saldo (idempotente por `topUpId` en la aplicación). */
+export type TopUpResult =
+  | {
+      readonly kind: 'APPLIED';
+      readonly wallet: Wallet;
+      readonly topUp: TopUp;
+      readonly transaction: WalletTransaction;
+    }
+  | { readonly kind: 'REPLAYED'; readonly topUp: TopUp };
+
+/** Recarga administrativa: suma un importe positivo (nunca fija el saldo). Idempotente. */
 export function topUpWallet(input: {
   topUpId: TopUpId;
-  transactionId: WalletTransactionId;
   wallet: Wallet;
   amount: Money;
+  existing: TopUp | undefined;
+  audit: OperationAudit;
   now: Date;
-}): { wallet: Wallet; transaction: WalletTransaction } {
+}): TopUpResult {
+  if (input.existing !== undefined) {
+    if (!input.existing.hasSameTerms(input.wallet.fleetId, input.amount)) {
+      throw new TopUpTermsMismatchError(`La recarga ${input.topUpId} ya existe con otro importe`);
+    }
+    return { kind: 'REPLAYED', topUp: input.existing };
+  }
+  const topUp = TopUp.create({
+    id: input.topUpId,
+    fleetId: input.wallet.fleetId,
+    amount: input.amount,
+    audit: input.audit,
+    createdAt: input.now,
+  });
   const wallet = input.wallet.credit(input.amount, input.now);
   const transaction = WalletTransaction.record(
     {
-      id: input.transactionId,
       fleetId: wallet.fleetId,
       amount: input.amount,
       balanceAfter: wallet.balance,
       occurredAt: input.now,
     },
-    { type: 'TOP_UP', topUpId: input.topUpId },
+    { type: 'TOP_UP', topUpId: topUp.id },
+    input.audit,
   );
-  return { wallet, transaction };
+  return { kind: 'APPLIED', wallet, topUp, transaction };
 }

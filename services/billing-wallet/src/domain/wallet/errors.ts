@@ -15,6 +15,16 @@ export class DebitTermsMismatchError extends DomainError {
   readonly code = 'IDEMPOTENCY_CONFLICT';
 }
 
+/** El débito pertenece a otra SAGA: no puede reembolsarlo quien lo pide. */
+export class DebitMismatchError extends DomainError {
+  readonly code = 'DEBIT_MISMATCH';
+}
+
+/** Mismo id de recarga con otro importe (protección de idempotencia). */
+export class TopUpTermsMismatchError extends DomainError {
+  readonly code = 'IDEMPOTENCY_CONFLICT';
+}
+
 /** Transición de estado no permitida sobre un débito. */
 export class InvalidDebitTransitionError extends DomainError {
   readonly code = 'INVALID_DEBIT_TRANSITION';

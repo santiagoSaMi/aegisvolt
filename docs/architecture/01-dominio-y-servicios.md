@@ -116,7 +116,7 @@ flowchart LR
 
   subgraph orch["saga-orchestrator-service"]
     direction TB
-    oHttp["interfaces/http<br/>POST /sagas, GET /sagas"]
+    oHttp["presentation/http<br/>POST /sagas, GET /sagas"]
     oApp["application<br/>StartSaga · AdvanceSaga · RecoverSagas"]
     oDom["domain<br/>ChargingSaga (máquina de estados),<br/>políticas de reintento y compensación"]
     oPorts["puertos<br/>SagaRepository · ReservationPort ·<br/>BillingPort · DispatchPort · Clock · IdGenerator"]
@@ -132,7 +132,7 @@ flowchart LR
 
   subgraph bill["billing-wallet-service"]
     direction TB
-    bHttp["interfaces/http<br/>PUT /debits/{id}, POST /debits/{id}/refund"]
+    bHttp["presentation/http<br/>PUT /debits/{id}, POST /debits/{id}/refund"]
     bApp["application<br/>DebitEstimatedCharge · RefundDebit · TopUpWallet"]
     bDom["domain<br/>Wallet, Debit, Money, PricingPolicy (surge)"]
     bPorts["puertos<br/>WalletRepository · FeatureFlagReader · Clock"]

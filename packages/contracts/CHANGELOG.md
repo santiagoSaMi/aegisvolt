@@ -2,6 +2,23 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — billing-wallet 1.1.0
+
+Cambios al implementar billing-wallet-service (ADR-0022). Todos compatibles (*minor*):
+
+- **Común:** prefijo `rfd` y `refundIdSchema`.
+- **Nuevo:**
+  - `PUT /v1/wallets/{fleetId}` (`openWalletRequestSchema`);
+  - `GET /v1/wallets/{fleetId}/funds-check` (`fundsCheckQuerySchema`, `fundsCheckViewSchema`);
+  - `POST /v1/debits` con `idempotency-key` (`createDebitRequestSchema`);
+  - `GET /v1/debits/{debitId}` documentado;
+  - `paths.fundsCheck` y `paths.debits`;
+  - error `DEBIT_MISMATCH`.
+- **Campos añadidos en respuestas:**
+  - `walletTransactionViewSchema`: `operationId`, `refundId`, `correlationId`, `idempotencyKey` (auditoría de cada movimiento);
+  - `debitViewSchema.refundId`;
+  - `refundDebitResponseSchema.refundId`.
+
 ## 2026-11-13 — station-reservation 1.1.0
 
 Cambios al implementar station-reservation-service (ADR-0021):

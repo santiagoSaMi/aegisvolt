@@ -1,9 +1,14 @@
-// Composition root: carga configuración, crea adaptadores y arranca el proceso.
-// Todavía no hay lógica de negocio; solo se exponen las probes de salud.
+// Composition root: carga la configuración validada, crea los adaptadores y
+// arranca el servidor HTTP con apagado ordenado.
 import { createLogger } from '@aegisvolt/logger';
 
+import { createUseCases } from './composition.ts';
 import { SERVICE_NAME, loadServiceConfig } from './config.ts';
-import { createHealthServer } from './interfaces/http/health-server.ts';
+import { createDynamoDbClients } from './infrastructure/aws/dynamodb-client.ts';
+import { SystemClock } from './infrastructure/clock/system-clock.ts';
+import { createDynamoDbReadinessCheck } from './infrastructure/dynamodb/readiness.ts';
+import { StaticFeatureFlagReader } from './infrastructure/feature-flags/static-feature-flag-reader.ts';
+import { createHttpApp } from './presentation/http/app.ts';
 
 function bootstrap(): void {
   const config = loadServiceConfig(process.env);
@@ -14,14 +19,43 @@ function bootstrap(): void {
     level: config.logLevel,
   });
 
-  const server = createHealthServer();
-  server.listen(config.port, () => {
-    logger.info('Servicio iniciado', { port: config.port });
+  const { client, documentClient } = createDynamoDbClients({
+    region: config.aws.region,
+    connectionTimeoutMs: config.dynamodb.connectionTimeoutMs,
+    requestTimeoutMs: config.dynamodb.requestTimeoutMs,
+    maxAttempts: config.dynamodb.maxAttempts,
+    ...(config.aws.endpointUrl === undefined ? {} : { endpointUrl: config.aws.endpointUrl }),
   });
+
+  const app = createHttpApp({
+    useCases: createUseCases({
+      documentClient,
+      tableName: config.dynamodb.tableName,
+      clock: new SystemClock(),
+      flags: new StaticFeatureFlagReader(config.featureFlags),
+      pricing: config.pricing,
+    }),
+    readinessCheck: createDynamoDbReadinessCheck(client, config.dynamodb.tableName),
+    logger,
+    requestTimeoutMs: config.http.requestTimeoutMs,
+  });
+
+  const server = app.listen(config.port, () => {
+    logger.info('Servicio iniciado', {
+      port: config.port,
+      table: config.dynamodb.tableName,
+      awsEndpoint: config.aws.endpointUrl ?? 'default',
+    });
+  });
+  // Timeouts del servidor por encima del presupuesto por petición (que responde 503).
+  server.requestTimeout = config.http.requestTimeoutMs + 5_000;
+  server.headersTimeout = config.http.requestTimeoutMs + 5_000;
+  server.keepAliveTimeout = 5_000;
 
   const shutdown = (signal: NodeJS.Signals): void => {
     logger.info('Apagado solicitado', { signal });
     server.close((error) => {
+      client.destroy();
       if (error) {
         logger.error('Error al cerrar el servidor HTTP', { error: error.message });
         process.exitCode = 1;

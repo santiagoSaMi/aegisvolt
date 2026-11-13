@@ -18,6 +18,7 @@ export const ID_PREFIXES = {
   debit: 'dbt',
   topUp: 'tup',
   walletTransaction: 'wtx',
+  refund: 'rfd',
   session: 'ses',
 } as const;
 
@@ -48,6 +49,7 @@ export const walletTransactionIdSchema = prefixedId(
   'WalletTransactionId',
 );
 export const sessionIdSchema = prefixedId(ID_PREFIXES.session, 'SessionId');
+export const refundIdSchema = prefixedId(ID_PREFIXES.refund, 'RefundId');
 
 export type StationId = z.output<typeof stationIdSchema>;
 export type ConnectorId = z.output<typeof connectorIdSchema>;
@@ -58,6 +60,7 @@ export type DebitId = z.output<typeof debitIdSchema>;
 export type TopUpId = z.output<typeof topUpIdSchema>;
 export type WalletTransactionId = z.output<typeof walletTransactionIdSchema>;
 export type SessionId = z.output<typeof sessionIdSchema>;
+export type RefundId = z.output<typeof refundIdSchema>;
 
 /** `correlation_id` de una petición (ADR-0009): UUID. */
 export const correlationIdSchema = z.uuid();
