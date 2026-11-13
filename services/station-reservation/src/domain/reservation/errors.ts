@@ -30,6 +30,11 @@ export class ReservationHoldExpiredError extends DomainError {
   readonly code = 'RESERVATION_HOLD_EXPIRED';
 }
 
+/** La reserva no corresponde a quien intenta operarla (otra SAGA). */
+export class ReservationMismatchError extends DomainError {
+  readonly code = 'RESERVATION_MISMATCH';
+}
+
 /** Mismo id de reserva con otros términos (protección de idempotencia). */
 export class ReservationTermsMismatchError extends DomainError {
   readonly code = 'IDEMPOTENCY_CONFLICT';

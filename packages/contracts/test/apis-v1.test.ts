@@ -24,7 +24,7 @@ describe('station-reservation v1', () => {
   const api = stationReservationV1;
 
   it('expone versión y rutas', () => {
-    expect(api.API).toEqual({ name: 'station-reservation', version: '1.0.0', basePath: '/v1' });
+    expect(api.API).toEqual({ name: 'station-reservation', version: '1.1.0', basePath: '/v1' });
     expect(api.paths.releaseReservation(ids.reservationId)).toBe(
       `/v1/reservations/${ids.reservationId}/release`,
     );
@@ -92,6 +92,39 @@ describe('station-reservation v1', () => {
         code: 'INSUFFICIENT_FUNDS',
       }).success,
     ).toBe(false);
+  });
+
+  it('registro de estación: 1–20 conectores sin ids repetidos', () => {
+    const station = {
+      name: 'Electrolinera Norte',
+      city: 'bogota',
+      location: { latitude: 4.7, longitude: -74.05 },
+      connectors: [{ connectorId: 'cn_01', type: 'CCS2', maxPowerKw: 150 }],
+    };
+    expect(api.registerStationRequestSchema.safeParse(station).success).toBe(true);
+    expect(api.registerStationRequestSchema.safeParse({ ...station, connectors: [] }).success).toBe(
+      false,
+    );
+    expect(
+      api.registerStationRequestSchema.safeParse({
+        ...station,
+        connectors: [station.connectors[0], station.connectors[0]],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('conectores disponibles: exactamente uno de city o stationId', () => {
+    const schema = api.listAvailableConnectorsQuerySchema;
+    expect(schema.safeParse({ city: 'bogota' }).success).toBe(true);
+    expect(schema.safeParse({ stationId: ids.stationId }).success).toBe(true);
+    expect(schema.safeParse({}).success).toBe(false);
+    expect(schema.safeParse({ city: 'bogota', stationId: ids.stationId }).success).toBe(false);
+  });
+
+  it('el listado de estaciones exige city y OCCUPIED es un estado público', () => {
+    expect(api.listStationsQuerySchema.safeParse({}).success).toBe(false);
+    expect(api.CONNECTOR_STATUSES).toContain('OCCUPIED');
+    expect(api.ERROR_CODES.RESERVATION_MISMATCH).toBe(409);
   });
 });
 

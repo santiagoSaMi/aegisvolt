@@ -2,6 +2,20 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — station-reservation 1.1.0
+
+Cambios al implementar station-reservation-service (ADR-0021):
+
+- **Nuevo:**
+  - `PUT /v1/stations/{stationId}` (`registerStationRequestSchema`);
+  - `GET /v1/connectors/available` (`listAvailableConnectorsQuerySchema`, `availableConnectorViewSchema`);
+  - `POST /v1/reservations` con `idempotency-key` (`createReservationRequestSchema`);
+  - `paths.availableConnectors` y `paths.reservations`;
+  - errores `RESERVATION_MISMATCH` y `STATION_ALREADY_EXISTS`.
+- **Corrección *pre-release*** (cambios que la política consideraría mayores, aceptados porque la v1 aún no tiene consumidores implementados):
+  - estado de conector `OCCUPIED` (carga en curso);
+  - `city` obligatoria en `GET /v1/stations` (consulta por índice, sin Scan).
+
 ## 2026-11-13
 
 ### Común

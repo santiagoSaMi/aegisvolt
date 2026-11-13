@@ -7,10 +7,12 @@ import {
   Reservation,
   ReservationCancelledError,
   ReservationHoldExpiredError,
+  ReservationMismatchError,
   ReservationNotHeldError,
   ReservationPolicy,
   ReservationTermsMismatchError,
   ReservationTombstone,
+  SagaId,
   StationId,
   UltraFastRequiresBoostError,
   confirmReservation,
@@ -20,6 +22,8 @@ import {
 import { NOW, OTHER_RESERVATION_ID, RESERVATION_ID, at, connector, terms } from './fixtures.ts';
 
 const policy = new ReservationPolicy();
+const SAGA_ID = terms().sagaId;
+const OTHER_SAGA_ID = SagaId.parse('saga_00000000-0000-4000-8000-000000000009');
 
 function hold(overrides: Partial<Parameters<typeof holdConnector>[0]> = {}) {
   return holdConnector({
@@ -76,13 +80,25 @@ describe('Reservation: transiciones', () => {
     expect(() => released.confirm(at(2_000))).toThrow(ReservationNotHeldError);
   });
 
-  it('expire solo aplica a un hold vencido', () => {
+  it('un HELD vencido se ve EXPIRED y expire lo persiste', () => {
     const { reservation } = created();
+    expect(reservation.effectiveStatusAt(at(1_000))).toBe('HELD');
+    expect(reservation.effectiveStatusAt(at(120_000))).toBe('EXPIRED');
     expect(() => reservation.expire(at(1_000))).toThrow(ReservationNotHeldError);
     expect(reservation.expire(at(120_000)).status).toBe('EXPIRED');
     expect(reservation.expire(at(120_000)).release('OPERATOR_REQUEST', at(121_000)).outcome).toBe(
       'ALREADY_RELEASED',
     );
+  });
+
+  it('solo la SAGA dueña puede operar la reserva', () => {
+    const { reservation } = created();
+    expect(() => {
+      reservation.assertRequestedBy(SAGA_ID);
+    }).not.toThrow();
+    expect(() => {
+      reservation.assertRequestedBy(OTHER_SAGA_ID);
+    }).toThrow(ReservationMismatchError);
   });
 
   it('restore exige releaseReason en una reserva RELEASED', () => {
@@ -102,19 +118,12 @@ describe('Reservation: transiciones', () => {
 
 describe('ReservationPolicy (ENABLE_FAST_CHARGE_BOOST)', () => {
   it('hold estándar de 120 s y extendido de 300 s con boost', () => {
+    const base = { connector: connector() };
     expect(
-      policy.holdDurationFor({
-        connector: connector(),
-        fastChargeBoost: false,
-        fastChargeBoostEnabled: false,
-      }),
+      policy.holdDurationFor({ ...base, fastChargeBoost: false, fastChargeBoostEnabled: false }),
     ).toBe(120_000);
     expect(
-      policy.holdDurationFor({
-        connector: connector(),
-        fastChargeBoost: true,
-        fastChargeBoostEnabled: true,
-      }),
+      policy.holdDurationFor({ ...base, fastChargeBoost: true, fastChargeBoostEnabled: true }),
     ).toBe(300_000);
   });
 
@@ -148,17 +157,20 @@ describe('ReservationPolicy (ENABLE_FAST_CHARGE_BOOST)', () => {
   });
 });
 
-describe('holdConnector (paso 1 de la SAGA, PUT idempotente)', () => {
+describe('holdConnector (paso 1 de la SAGA, idempotente)', () => {
   it('crea la reserva y bloquea el conector hasta el mismo instante', () => {
-    const { reservation, connector: held } = created();
-    expect(held.hold?.reservationId).toBe(reservation.id);
-    expect(held.hold?.expiresAt).toEqual(reservation.holdExpiresAt);
+    const result = created();
+    expect(result.connector.hold?.reservationId).toBe(result.reservation.id);
+    expect(result.connector.hold?.expiresAt).toEqual(result.reservation.holdExpiresAt);
+    expect(result.displacedReservationId).toBeUndefined();
   });
 
   it('repetir con los mismos términos devuelve la reserva existente (REPLAYED)', () => {
     const { reservation } = created();
-    const replay = hold({ existing: reservation, now: at(3_000) });
-    expect(replay).toEqual({ kind: 'REPLAYED', reservation });
+    expect(hold({ existing: reservation, now: at(3_000) })).toEqual({
+      kind: 'REPLAYED',
+      reservation,
+    });
   });
 
   it('el mismo id con otros términos es un conflicto de idempotencia', () => {
@@ -168,7 +180,7 @@ describe('holdConnector (paso 1 de la SAGA, PUT idempotente)', () => {
     );
   });
 
-  it('un tombstone bloquea el PUT tardío (compensación llegó antes)', () => {
+  it('un tombstone bloquea la creación tardía (la compensación llegó antes)', () => {
     const tombstone = ReservationTombstone.create(RESERVATION_ID, 'FORWARD_STEP_FAILED', NOW);
     expect(() => hold({ tombstone })).toThrow(ReservationCancelledError);
   });
@@ -185,6 +197,17 @@ describe('holdConnector (paso 1 de la SAGA, PUT idempotente)', () => {
       hold({ reservationId: OTHER_RESERVATION_ID, connector: held, now: at(1_000) }),
     ).toThrow(ConnectorUnavailableError);
   });
+
+  it('tomar un conector con hold vencido informa la reserva desplazada', () => {
+    const { connector: held } = created();
+    const result = hold({ reservationId: OTHER_RESERVATION_ID, connector: held, now: at(130_000) });
+
+    expect(result.kind).toBe('CREATED');
+    if (result.kind === 'CREATED') {
+      expect(result.displacedReservationId).toBe(RESERVATION_ID);
+      expect(result.connector.hold?.reservationId).toBe(OTHER_RESERVATION_ID);
+    }
+  });
 });
 
 describe('releaseReservation (compensación)', () => {
@@ -195,6 +218,7 @@ describe('releaseReservation (compensación)', () => {
       reservation,
       connector: held,
       reason: 'INSUFFICIENT_FUNDS',
+      requestedBy: SAGA_ID,
       now: at(1_000),
     });
 
@@ -205,12 +229,27 @@ describe('releaseReservation (compensación)', () => {
     }
   });
 
+  it('rechaza la liberación pedida por otra SAGA (RESERVATION_MISMATCH)', () => {
+    const { reservation, connector: held } = created();
+    expect(() =>
+      releaseReservation({
+        reservationId: reservation.id,
+        reservation,
+        connector: held,
+        reason: 'OPERATOR_REQUEST',
+        requestedBy: OTHER_SAGA_ID,
+        now: at(1_000),
+      }),
+    ).toThrow(ReservationMismatchError);
+  });
+
   it('si la reserva no existe, registra un tombstone (VOIDED)', () => {
     const result = releaseReservation({
       reservationId: RESERVATION_ID,
       reservation: undefined,
       connector: undefined,
       reason: 'FORWARD_STEP_FAILED',
+      requestedBy: SAGA_ID,
       now: NOW,
     });
 
@@ -222,11 +261,23 @@ describe('releaseReservation (compensación)', () => {
 });
 
 describe('confirmReservation (fin de la SAGA)', () => {
-  it('confirma reserva y conector', () => {
+  it('confirma la reserva y ocupa el conector', () => {
     const { reservation, connector: held } = created();
-    const result = confirmReservation({ reservation, connector: held, now: at(5_000) });
+    const result = confirmReservation({
+      reservation,
+      connector: held,
+      requestedBy: SAGA_ID,
+      now: at(5_000),
+    });
 
     expect(result.reservation.status).toBe('CONFIRMED');
-    expect(result.connector.hold?.confirmed).toBe(true);
+    expect(result.connector.status).toBe('OCCUPIED');
+  });
+
+  it('otra SAGA no puede confirmarla', () => {
+    const { reservation, connector: held } = created();
+    expect(() =>
+      confirmReservation({ reservation, connector: held, requestedBy: OTHER_SAGA_ID, now: NOW }),
+    ).toThrow(ReservationMismatchError);
   });
 });

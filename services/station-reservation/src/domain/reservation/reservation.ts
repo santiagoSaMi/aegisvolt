@@ -6,7 +6,11 @@ import type {
   SagaId,
   StationId,
 } from '../shared/identifiers.ts';
-import { ReservationHoldExpiredError, ReservationNotHeldError } from './errors.ts';
+import {
+  ReservationHoldExpiredError,
+  ReservationMismatchError,
+  ReservationNotHeldError,
+} from './errors.ts';
 
 export const RESERVATION_STATUSES = ['HELD', 'CONFIRMED', 'RELEASED', 'EXPIRED'] as const;
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
@@ -108,6 +112,23 @@ export class Reservation {
       this.terms.connectorId === terms.connectorId &&
       this.terms.fastChargeBoost === terms.fastChargeBoost
     );
+  }
+
+  /** Estado efectivo en `now`: un HELD vencido se ve EXPIRED aunque no se haya persistido. */
+  effectiveStatusAt(now: Date): ReservationStatus {
+    return this.isHoldExpiredAt(now) ? 'EXPIRED' : this.status;
+  }
+
+  /**
+   * Solo la SAGA dueña de la reserva puede confirmarla o liberarla: evita que una
+   * petición equivocada libere la reserva de otra flota.
+   */
+  assertRequestedBy(sagaId: SagaId): void {
+    if (this.terms.sagaId !== sagaId) {
+      throw new ReservationMismatchError(
+        `La reserva ${this.id} pertenece a otra SAGA; no puede operarla ${sagaId}`,
+      );
+    }
   }
 
   confirm(now: Date): Reservation {

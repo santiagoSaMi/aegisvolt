@@ -16,13 +16,15 @@ Convenciones comunes de los cinco dominios:
 | Tipo | Elemento | Invariantes / reglas |
 | --- | --- | --- |
 | Entidad | **Station** | Nombre recortado de 1–120 caracteres; ciudad y ubicación válidas. Solo datos de catálogo. |
-| Agregado | **ChargingConnector** | `RESERVED` ⇔ existe `hold`. Un *hold* no confirmado y vencido deja el conector disponible (vencimiento perezoso). Un *hold* confirmado no vence. `release` de otra reserva no hace nada. No se saca de servicio con una reserva vigente. |
-| Agregado | **Reservation** | Términos inmutables (`sagaId`, `fleetId`, `stationId`, `connectorId`, `fastChargeBoost`) usados para la idempotencia; `RELEASED` exige `releaseReason`. |
+| Agregado | **ChargingConnector** | Estados `AVAILABLE`, `RESERVED` (bloqueo temporal), `OCCUPIED` (carga en curso) y `OUT_OF_SERVICE` (avería o mantenimiento). Existe `hold` ⇔ `RESERVED` u `OCCUPIED`. Un `RESERVED` vencido se ve disponible (vencimiento perezoso, `effectiveStatusAt`); un `OCCUPIED` no vence. `release` de otra reserva no hace nada. No se saca de servicio con una reserva vigente. |
+| Agregado | **Reservation** | Términos inmutables (`sagaId`, `fleetId`, `stationId`, `connectorId`, `fastChargeBoost`) usados para la idempotencia; `RELEASED` exige `releaseReason`. Solo la SAGA dueña la confirma o libera (`RESERVATION_MISMATCH`). Un `HELD` vencido se informa `EXPIRED`. |
 | Entidad | ReservationTombstone | Bloquea un `PUT` tardío con un id ya compensado. |
 | Value Objects | `GeoLocation`, `City` (slug), `PowerKw` (> 0, ≤ 1000; ultra-carga ≥ 150 kW), `ConnectorType` | |
 | Política | `ReservationPolicy` | *Hold* de 120 s, o 300 s con *boost*. *Boost* con la flag apagada → `FAST_CHARGE_BOOST_DISABLED`. Ultra-carga sin *boost* → `ULTRA_FAST_REQUIRES_BOOST` (P-14). |
 | Servicios | `holdConnector`, `releaseReservation`, `confirmReservation` | |
-| Errores | `CONNECTOR_UNAVAILABLE`, `FAST_CHARGE_BOOST_DISABLED`, `ULTRA_FAST_REQUIRES_BOOST`, `RESERVATION_CANCELLED`, `RESERVATION_NOT_HELD`, `RESERVATION_HOLD_EXPIRED`, `IDEMPOTENCY_CONFLICT`, `INVALID_VALUE` | |
+| Errores | `CONNECTOR_UNAVAILABLE`, `FAST_CHARGE_BOOST_DISABLED`, `ULTRA_FAST_REQUIRES_BOOST`, `RESERVATION_CANCELLED`, `RESERVATION_NOT_HELD`, `RESERVATION_HOLD_EXPIRED`, `RESERVATION_MISMATCH`, `IDEMPOTENCY_CONFLICT`, `INVALID_VALUE` | |
+
+Persistencia, concurrencia y expiración del servicio: [ADR-0021](../adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md).
 
 ```mermaid
 stateDiagram-v2
@@ -30,8 +32,9 @@ stateDiagram-v2
   state "ChargingConnector" as C {
     [*] --> AVAILABLE
     AVAILABLE --> RESERVED: placeHold
-    RESERVED --> RESERVED: confirmHold (no vence)
+    RESERVED --> OCCUPIED: confirmHold (no vence)
     RESERVED --> AVAILABLE: release / hold vencido
+    OCCUPIED --> AVAILABLE: release
     AVAILABLE --> OUT_OF_SERVICE: takeOutOfService
     OUT_OF_SERVICE --> AVAILABLE: returnToService
   }

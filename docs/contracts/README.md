@@ -4,7 +4,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 
 | Contrato | Módulo | Versión | Proveedor | Consumidores |
 | --- | --- | --- | --- | --- |
-| station-reservation | `stationReservationV1` | 1.0.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
+| station-reservation | `stationReservationV1` | 1.1.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
 | billing-wallet | `billingWalletV1` | 1.0.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
 | energy-dispatch | `energyDispatchV1` | 1.0.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones y telemetría) |
 | saga-orchestrator | `sagaOrchestratorV1` | 1.0.0 | saga-orchestrator-service | graphql-api |
@@ -75,13 +75,25 @@ Cada servicio tiene su propio modelo en `src/domain/`. Las pruebas `test/domain/
 
 | Operación | Petición | Respuesta | Errores de negocio |
 | --- | --- | --- | --- |
-| `GET /v1/stations?city=` | `listStationsQuerySchema` | `listStationsResponseSchema` (`items[]` con conectores y `availableForReservation`) | — |
-| `GET /v1/stations/{stationId}` | — | `stationViewSchema` | `404 STATION_NOT_FOUND` |
-| `PUT /v1/reservations/{reservationId}` (SAGA paso 1) | `holdReservationRequestSchema` `{sagaId, fleetId, stationId, connectorId, fastChargeBoost}` | `reservationViewSchema` (HELD, `holdExpiresAt`) | `409 CONNECTOR_UNAVAILABLE`, `409 ULTRA_FAST_REQUIRES_BOOST`, `403 FAST_CHARGE_BOOST_DISABLED`, `409 RESERVATION_CANCELLED`, `409 IDEMPOTENCY_CONFLICT`, `404 CONNECTOR_NOT_FOUND` |
-| `POST /v1/reservations/{id}/confirm` (fin de la SAGA) | `{}` | `reservationViewSchema` (CONFIRMED) | `409 RESERVATION_NOT_HELD`, `409 RESERVATION_HOLD_EXPIRED`, `404 RESERVATION_NOT_FOUND` |
-| `POST /v1/reservations/{id}/release` (compensación) | `{reason}` | `{reservationId, status, outcome: RELEASED \| ALREADY_RELEASED \| VOIDED}` | — |
+Versión 1.1.0, implementada en [station-reservation-service](../../services/station-reservation/README.md).
 
-Estados: conector `AVAILABLE | RESERVED | OUT_OF_SERVICE`; reserva `HELD | CONFIRMED | RELEASED | EXPIRED | VOIDED`.
+| Operación | Petición | Respuesta | Errores de negocio |
+| --- | --- | --- | --- |
+| `PUT /v1/stations/{stationId}` (alta de catálogo) | `registerStationRequestSchema` (1–20 conectores sin ids repetidos) | `201` / `200` (ya existía idéntica) `stationViewSchema` | `409 STATION_ALREADY_EXISTS` |
+| `GET /v1/stations?city=` (city obligatoria) | `listStationsQuerySchema` | `listStationsResponseSchema` (`items[]` con conectores y `availableForReservation`) | — |
+| `GET /v1/stations/{stationId}` | — | `stationViewSchema` | `404 STATION_NOT_FOUND` |
+| `GET /v1/connectors/available?city=` o `?stationId=` | `listAvailableConnectorsQuerySchema` (exactamente uno) | `listAvailableConnectorsResponseSchema` | `404 STATION_NOT_FOUND` |
+| `PUT /v1/reservations/{reservationId}` (SAGA paso 1; `x-saga-id` = `body.sagaId`) | `holdReservationRequestSchema` `{sagaId, fleetId, stationId, connectorId, fastChargeBoost}` | `201`/`200` `reservationViewSchema` (HELD, `holdExpiresAt`) | `409 CONNECTOR_UNAVAILABLE`, `409 ULTRA_FAST_REQUIRES_BOOST`, `403 FAST_CHARGE_BOOST_DISABLED`, `409 RESERVATION_CANCELLED`, `409 IDEMPOTENCY_CONFLICT`, `404 CONNECTOR_NOT_FOUND` |
+| `POST /v1/reservations` + `idempotency-key` | `createReservationRequestSchema` (mismo cuerpo) | `201`/`200` `reservationViewSchema`, `location: /v1/reservations/res_<clave>` | iguales que el `PUT` |
+| `GET /v1/reservations/{id}` | — | `reservationViewSchema` (estado efectivo: un HELD vencido se informa EXPIRED) | `404 RESERVATION_NOT_FOUND` |
+| `POST /v1/reservations/{id}/confirm` (fin de la SAGA) | `{}` | `reservationViewSchema` (CONFIRMED; conector → OCCUPIED) | `409 RESERVATION_NOT_HELD`, `409 RESERVATION_HOLD_EXPIRED`, `409 RESERVATION_MISMATCH`, `409 RESERVATION_CANCELLED`, `404 RESERVATION_NOT_FOUND` |
+| `POST /v1/reservations/{id}/release` (compensación) | `{reason}` | `{reservationId, status, outcome: RELEASED \| ALREADY_RELEASED \| VOIDED}` | `409 RESERVATION_MISMATCH` (`x-saga-id` no es la dueña) |
+
+Estados (efectivos en el momento de la consulta):
+- **Conector:** `AVAILABLE | RESERVED | OCCUPIED | OUT_OF_SERVICE`.
+- **Reserva:** `HELD | CONFIRMED | RELEASED | EXPIRED | VOIDED`.
+
+Si los conflictos de concurrencia persisten tras 3 intentos, la respuesta es `503 SERVICE_UNAVAILABLE`, reintentable.
 
 ## billing-wallet v1
 

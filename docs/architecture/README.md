@@ -72,5 +72,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md) | Toolchain del monorepo: pnpm, Node 26, TypeScript 6 y calidad | Aceptado |
 | [0019](../adr/0019-paquetes-transversales-logger-config-contracts.md) | Paquetes transversales: logger (pino), config (zod) y contracts | Aceptado |
 | [0020](../adr/0020-modelos-de-dominio-y-contratos-zod.md) | Modelos de dominio por bounded context y contratos con Zod | Aceptado |
+| [0021](../adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md) | station-reservation: concurrencia, idempotencia, expiración y presentación | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

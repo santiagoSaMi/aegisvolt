@@ -8,7 +8,9 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | --- | --- |
 | Entorno local AWS con Floci | Listo. Ver [`infra/local/floci/README.md`](infra/local/floci/README.md) |
 | Diseño de arquitectura | Documentado en [`docs/architecture/`](docs/architecture/README.md), ADR 0002–0017; decisiones pendientes en [09](docs/architecture/09-analisis-especificacion.md) |
-| Estructura del monorepo | Lista ([ADR-0018](docs/adr/0018-toolchain-monorepo-pnpm-node-typescript.md), [ADR-0019](docs/adr/0019-paquetes-transversales-logger-config-contracts.md)). Aún sin lógica de negocio |
+| Estructura del monorepo | Lista ([ADR-0018](docs/adr/0018-toolchain-monorepo-pnpm-node-typescript.md), [ADR-0019](docs/adr/0019-paquetes-transversales-logger-config-contracts.md)) |
+| Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
+| station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
 
 ## Requisitos
 
@@ -34,7 +36,8 @@ pnpm check                    # formato + lint + typecheck + pruebas + build (lo
 | --- | --- |
 | `pnpm build` | Compila todos los paquetes en orden topológico (`tsc` en Node, `vite build` en la web) |
 | `pnpm typecheck` | Compila `packages/*` y ejecuta `tsc --noEmit` en cada proyecto |
-| `pnpm test` | Ejecuta las pruebas de todos los proyectos con Vitest |
+| `pnpm test` | Ejecuta las pruebas de todos los proyectos con Vitest (sin dependencias externas) |
+| `pnpm test:integration` | Pruebas de integración contra Floci (`scripts/floci/start.sh` antes). Se omiten si Floci no responde, salvo con `REQUIRE_INTEGRATION=true` |
 | `pnpm lint` | ESLint con reglas de tipos (`--max-warnings=0`) + dependency-cruiser (ciclos, capas y límites entre servicios) |
 | `pnpm lint:code` / `pnpm lint:deps` | Cada una de las dos partes de `lint` por separado |
 | `pnpm format` / `pnpm format:check` | Aplica o verifica Prettier (el Markdown queda excluido para preservar la documentación) |
