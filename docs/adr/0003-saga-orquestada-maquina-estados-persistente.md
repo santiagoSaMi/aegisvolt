@@ -1,6 +1,6 @@
 # ADR-0003: SAGA orquestada con máquina de estados persistente en DynamoDB
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. El vocabulario de estados fue sustituido por [ADR-0024](0024-saga-orquestada-implementacion-estados-lease-recuperacion.md): `RESERVATION_COMPLETED`, `BILLING_COMPLETED`, `DISPATCH_COMPLETED` y `COMPENSATION_FAILED` en lugar de `RESERVING`…`CONFIRMING`, `COMPENSATION_PENDING` y `REQUIRES_ATTENTION`. El resto de la decisión sigue vigente.
 - **Fecha:** 2026-11-12
 
 ## Contexto

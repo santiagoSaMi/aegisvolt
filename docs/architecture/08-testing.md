@@ -18,7 +18,7 @@ Cubre el punto 18. Decisión: [ADR-0016](../adr/0016-estrategia-de-pruebas.md). 
   - cada transición válida;
   - rechazo de transiciones inválidas;
   - orden inverso de compensaciones;
-  - `COMPENSATION_PENDING` → `REQUIRES_ATTENTION` al agotar intentos;
+  - `COMPENSATION_FAILED` con reintento programado o, al agotar las rondas o ante un error no recuperable, a la espera de un reintento controlado (ADR-0024);
   - decisión en el pivote (`ACTIVE` → confirmar; desconocido → compensar);
   - `SAGA_FORWARD_DEADLINE` en recuperación.
 - **Política de reintentos:** reintenta solo ante errores transitorios; nunca ante `409`/`422`; backoff con jitter determinista (`Random` inyectado).
@@ -33,7 +33,8 @@ Cubre el punto 18. Decisión: [ADR-0016](../adr/0016-estrategia-de-pruebas.md). 
 - **Compensación antes del avance:** `refund` sobre un débito inexistente crea un tombstone y el `PUT` posterior devuelve `409 DEBIT_VOIDED`. Lo mismo para la reserva y la sesión.
 - **Concurrencia:** dos `PUT /reservations` simultáneos sobre el mismo conector dejan exactamente uno `HELD`.
 - Saga y SagaEvent atómicos: la escritura condicional falla con una `version` obsoleta.
-- **RecoveryWorker:** una SAGA "abandonada" en `DEBITING` se recupera, y el *lease* impide que dos workers la procesen.
+- **RecoveryWorker:** una SAGA "abandonada" con el débito `IN_PROGRESS` se recupera, y el *lease* impide que dos workers la procesen.
+- **E2E de la SAGA** (`pnpm test:e2e`): los cuatro servicios reales contra Floci, con la evidencia de DynamoDB del [runbook](../runbooks/saga-demo.md).
 - **Feature flags:** un cambio en la tabla se refleja tras el TTL de la caché; el valor por defecto se usa si la tabla no está disponible.
 - **Logs:** el JSON contiene los campos obligatorios y la propagación de `correlation_id` (a nivel de proceso; el envío a CloudWatch se prueba en la fase de observabilidad).
 - **Verificación de JWT** contra un User Pool efímero de Cognito en Floci.

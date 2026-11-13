@@ -2,6 +2,7 @@ packages:
   - apps/*
   - services/*
   - packages/*
+  - tests/e2e
 
 # Versiones compartidas (fuente única). Cada paquete las declara con "catalog:"
 # para seguir siendo instalable/desplegable de forma independiente.

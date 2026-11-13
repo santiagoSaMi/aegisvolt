@@ -52,7 +52,15 @@ function bootstrap(): void {
     requestTimeoutMs: config.http.requestTimeoutMs,
   });
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, (error?: Error) => {
+    // Express 5 entrega aquí los errores de `listen` (p. ej. EADDRINUSE): sin
+    // esta comprobación el proceso terminaría con código 0 sin servir nada.
+    if (error) {
+      logger.fatal('No se pudo abrir el puerto HTTP', { port: config.port, error: error.message });
+      process.exitCode = 1;
+      client.destroy();
+      return;
+    }
     logger.info('Servicio iniciado', {
       port: config.port,
       table: config.dynamodb.tableName,

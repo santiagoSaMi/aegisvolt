@@ -2,6 +2,25 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — saga-orchestrator 1.1.0
+
+Cambios al implementar el orquestador (ADR-0024):
+
+- **Corrección *pre-release*** (aceptada porque la v1 aún no tiene consumidores):
+  - estados por hito: `STARTED`, `RESERVATION_COMPLETED`, `BILLING_COMPLETED`, `DISPATCH_COMPLETED`, `COMPLETED`, `COMPENSATING`, `COMPENSATED`, `FAILED` y `COMPENSATION_FAILED`;
+  - se eliminan `RESERVING`, `DEBITING`, `ACTIVATING`, `CONFIRMING`, `COMPENSATION_PENDING` y `REQUIRES_ATTENTION`;
+  - terminales: `COMPLETED`, `COMPENSATED` y `FAILED`;
+  - eventos: `COMPENSATION_STEP_STARTED`, `COMPENSATION_STEP_FAILED`, `COMPENSATION_RETRY_REQUESTED` y `SAGA_COMPENSATION_FAILED` (en lugar de `COMPENSATION_FAILED` y `SAGA_REQUIRES_ATTENTION`).
+- **Nuevo:**
+  - estado de paso `IN_PROGRESS`;
+  - motivos `STATION_NOT_FOUND`, `CONNECTOR_NOT_FOUND`, `WALLET_NOT_FOUND`, `CONNECTOR_BUSY`, `RESERVATION_HOLD_EXPIRED`, `RESERVATION_NOT_HELD` y `STEP_REJECTED`;
+  - `POST /v1/sagas/{id}/compensation/retry` (`paths.retryCompensation`);
+  - errores `SAGA_NOT_RETRYABLE` y `SAGA_BUSY`.
+- **Campos añadidos:**
+  - `sagaViewSchema`: `reservationId`, `debitId`, `sessionId`, `connectorPowerKw`, `failedStep`, `compensationPlan`, `compensationFailure`;
+  - `sagaStepViewSchema.idempotencyKey`;
+  - `sagaEventViewSchema`: `status`, `attempt`, `correlationId`.
+
 ## 2026-11-13 — energy-dispatch 1.1.0
 
 Cambios al implementar energy-dispatch-service (ADR-0023):

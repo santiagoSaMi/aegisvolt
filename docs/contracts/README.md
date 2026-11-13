@@ -7,7 +7,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 | station-reservation | `stationReservationV1` | 1.1.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
 | billing-wallet | `billingWalletV1` | 1.1.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
 | energy-dispatch | `energyDispatchV1` | 1.1.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones, parada, cargadores y telemetría) |
-| saga-orchestrator | `sagaOrchestratorV1` | 1.0.0 | saga-orchestrator-service | graphql-api |
+| saga-orchestrator | `sagaOrchestratorV1` | 1.1.0 | saga-orchestrator-service | graphql-api |
 | feature-flags (datos, no HTTP) | `featureFlagsV1` | 1.0.0 | graphql-api (único escritor) | los tres servicios (lectura) |
 
 Historial de cambios: [`packages/contracts/CHANGELOG.md`](../../packages/contracts/CHANGELOG.md).
@@ -137,12 +137,13 @@ Estados: `ACTIVE | FAILED | ABORTED | COMPLETED | VOIDED`. Si la activación hac
 
 | Operación | Petición | Respuesta | Errores de negocio |
 | --- | --- | --- | --- |
-| `POST /v1/sagas` (+ `idempotency-key`) | `startSagaRequestSchema` `{fleetId, stationId, connectorId, requestedEnergyKwh, fastChargeBoost=false}` | `201` (terminal) o `202` (en curso) con `sagaViewSchema` | `409 IDEMPOTENCY_KEY_CONFLICT` |
-| `GET /v1/sagas/{sagaId}` | — | `sagaViewSchema` (estado, `terminal`, `failureReason`, `steps[]`) | `404 SAGA_NOT_FOUND` |
+| `POST /v1/sagas` (+ `idempotency-key`) | `startSagaRequestSchema` `{fleetId, stationId, connectorId, requestedEnergyKwh, fastChargeBoost=false}` | `201` (terminal) o `202` (en curso o `COMPENSATION_FAILED`) con `sagaViewSchema`. `sagaId = saga_<idempotency-key>` | `409 IDEMPOTENCY_KEY_CONFLICT` |
+| `GET /v1/sagas/{sagaId}` | — | `sagaViewSchema` (estado, `terminal`, ids de recursos, `failureReason`, `compensationPlan`, `compensationFailure`, `steps[]` con `idempotencyKey`) | `404 SAGA_NOT_FOUND` |
+| `POST /v1/sagas/{sagaId}/compensation/retry` | — | `200`/`202` `sagaViewSchema` | `409 SAGA_NOT_RETRYABLE`, `409 SAGA_BUSY` |
 | `GET /v1/sagas/{sagaId}/events` | — | `{items[]}` (historial para el panel de compensaciones) | `404 SAGA_NOT_FOUND` |
 | `GET /v1/sagas?fleetId=&status=&limit=` | `listSagasQuerySchema` | `{items[]}` | — |
 
-Los estados, pasos, eventos y motivos de fallo están en el módulo y coinciden con [02-saga.md](../architecture/02-saga.md).
+Versión 1.1.0, implementada en [saga-orchestrator-service](../../services/saga-orchestrator/README.md). Estados: `STARTED`, `RESERVATION_COMPLETED`, `BILLING_COMPLETED`, `DISPATCH_COMPLETED`, `COMPLETED`, `COMPENSATING`, `COMPENSATED`, `FAILED` y `COMPENSATION_FAILED` (no terminal). Los pasos, eventos y motivos de fallo están en el módulo y coinciden con [02-saga.md](../architecture/02-saga.md).
 
 ## feature-flags v1 (contrato de datos)
 

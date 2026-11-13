@@ -103,26 +103,26 @@ stateDiagram-v2
 
 | Tipo | Elemento | Invariantes / reglas |
 | --- | --- | --- |
-| Agregado | **SagaTransaction** | Máquina de estados de [02-saga.md](02-saga.md). Ids de recursos pre-generados al crearse. Cada transición valida el estado de origen y añade eventos con secuencia continua. El plan de compensación se fija al empezar a compensar y se ejecuta en orden. Una SAGA terminal no programa reintentos. `COMPENSATION_PENDING` exige `nextAttemptAt`. |
+| Agregado | **SagaTransaction** | Máquina de estados por hito de [02-saga.md](02-saga.md) (ADR-0024). Ids de recursos y claves idempotentes de confirmación y compensaciones pre-generados al crearse. El paso en curso se marca `IN_PROGRESS` antes de llamar. Cada transición valida el estado de origen y añade eventos pendientes con secuencia continua. El plan de compensación se fija al fallar y se ejecuta en orden; solo queda `COMPENSATED` con todas las compensaciones verificadas. `COMPENSATION_FAILED` ⇔ tiene `compensationFailure` (paso, error, ronda, `nextAttemptAt` opcional). La misma clave exige la misma petición. |
 | Value Objects | `CorrelationId` (UUID), ids *branded*, `RetryPolicy` | |
 | Funciones | `compensationPlanFor(paso, resultadoConocido)`, `isTransientFailure` | |
-| Errores | `INVALID_SAGA_TRANSITION`, `INVALID_VALUE` | |
+| Errores | `INVALID_SAGA_TRANSITION`, `SAGA_NOT_RETRYABLE`, `IDEMPOTENCY_KEY_CONFLICT`, `INVALID_VALUE` | |
 
 Operaciones del agregado:
 
 | Fase | Operaciones |
 | --- | --- |
-| Avance | `beginReservation`, `completeCurrentStep`, `recordAttemptFailure` |
-| Fallo de un paso | `rejectCurrentStep` (rechazo de negocio), `abandonCurrentStep` (resultado desconocido) |
-| Compensación | `compensationSucceeded`, `compensationFailed`, `resumeCompensation` |
+| Avance | `beginStep`, `completeStep`, `recordStepAttemptFailure` |
+| Fallo de un paso | `rejectStep` (rechazo definitivo), `abandonStep` (resultado desconocido) |
+| Compensación | `beginCompensation`, `compensationSucceeded`, `recordCompensationAttemptFailure`, `compensationFailed`, `retryCompensation` (automático o controlado) |
 | Recuperación | `markRecovered`, `isDueForRecovery`, `exceedsForwardDeadline` |
 
 | Paso fallido | Rechazo de negocio (sin efecto) | Abandono técnico (efecto desconocido) | Estado final |
 | --- | --- | --- | --- |
 | RESERVATION | — (FAILED directo) | release | FAILED |
 | DEBIT | release | refund → release | COMPENSATED |
-| ACTIVATION | abort → refund → release | abort → refund → release | COMPENSATED |
-| CONFIRMATION | no aplica (pivote superado) | — | REQUIRES_ATTENTION |
+| ACTIVATION | refund → release | abort → refund → release | COMPENSATED |
+| CONFIRMATION | abort → refund → release | abort → refund → release | COMPENSATED |
 
 El diagrama de estados de la SAGA está en [02-saga.md](02-saga.md#7-máquina-de-estados-persistente).
 

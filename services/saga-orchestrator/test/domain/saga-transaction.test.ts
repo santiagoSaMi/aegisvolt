@@ -5,11 +5,13 @@ import {
   CorrelationId,
   DebitId,
   FleetId,
+  IdempotencyKeyConflictError,
   InvalidSagaTransitionError,
   InvalidValueError,
   ReservationId,
   RetryPolicy,
   SagaId,
+  SagaNotRetryableError,
   SagaTransaction,
   SessionId,
   StationId,
@@ -20,298 +22,260 @@ const NOW = new Date('2026-11-13T15:00:00.000Z');
 const at = (offsetMs: number): Date => new Date(NOW.getTime() + offsetMs);
 const UUID = '3f2c1e5a-1b2c-4d3e-8f90-123456789abc';
 const random = (): number => 0.5;
+const ROUNDS = new RetryPolicy({
+  maxAttempts: 2,
+  baseDelayMs: 5_000,
+  maxDelayMs: 60_000,
+  multiplier: 3,
+});
+
+const request = (requestedEnergyKwh = 30) => ({
+  fleetId: FleetId.parse('fleet_001'),
+  stationId: StationId.parse('st_bog-norte-01'),
+  connectorId: ConnectorId.parse('cn_01'),
+  requestedEnergyKwh,
+  fastChargeBoost: false,
+});
 
 function started(requestedEnergyKwh = 30): SagaTransaction {
   return SagaTransaction.start({
     id: SagaId.parse(`saga_${UUID}`),
-    request: {
-      fleetId: FleetId.parse('fleet_001'),
-      stationId: StationId.parse('st_bog-norte-01'),
-      connectorId: ConnectorId.parse('cn_01'),
-      requestedEnergyKwh,
-      fastChargeBoost: false,
-    },
+    idempotencyKey: UUID,
+    request: request(requestedEnergyKwh),
     resources: {
       reservationId: ReservationId.parse(`res_${UUID}`),
       debitId: DebitId.parse(`dbt_${UUID}`),
       sessionId: SessionId.parse(`ses_${UUID}`),
+    },
+    operationKeys: {
+      CONFIRMATION: 'k-confirm',
+      ABORT_SESSION: 'k-abort',
+      REFUND_DEBIT: 'k-refund',
+      RELEASE_RESERVATION: 'k-release',
     },
     correlationId: CorrelationId.parse(UUID),
     now: NOW,
   });
 }
 
-/** SAGA en el paso indicado (cada paso anterior completado). */
-function inStatus(status: 'RESERVING' | 'DEBITING' | 'ACTIVATING' | 'CONFIRMING'): SagaTransaction {
-  const order = ['RESERVING', 'DEBITING', 'ACTIVATING', 'CONFIRMING'];
-  let saga = started().beginReservation(at(1));
-  for (let i = 0; i < order.indexOf(status); i++) {
-    saga = saga.completeCurrentStep(at(10 + i));
+/** Ejecuta `n` pasos de avance con éxito. */
+function advanced(steps: number): SagaTransaction {
+  let saga = started();
+  for (let i = 0; i < steps; i++) {
+    saga = saga.beginStep(at(i * 10 + 1));
+    saga = saga.completeStep(at(i * 10 + 2), i === 0 ? { connectorPowerKw: 60 } : {});
   }
   return saga;
 }
 
-const eventTypes = (saga: SagaTransaction): string[] => saga.events.map((event) => event.type);
-
-describe('SagaTransaction: creación', () => {
-  it('nace STARTED con el evento SAGA_STARTED y los ids pre-generados', () => {
+describe('creación', () => {
+  it('nace STARTED con SAGA_STARTED pendiente de persistir y claves estables', () => {
     const saga = started();
     expect(saga.status).toBe('STARTED');
-    expect(saga.events).toEqual([{ sequence: 0, type: 'SAGA_STARTED', occurredAt: NOW }]);
-    expect(saga.resources.debitId).toBe(`dbt_${UUID}`);
+    expect(saga.pendingEvents).toEqual([
+      { sequence: 0, type: 'SAGA_STARTED', status: 'STARTED', occurredAt: NOW },
+    ]);
+    expect(saga.idempotencyKeyFor('DEBIT')).toBe(`dbt_${UUID}`);
+    expect(saga.idempotencyKeyFor('REFUND_DEBIT')).toBe('k-refund');
   });
 
-  it('valida la energía solicitada', () => {
+  it('valida energía, correlation_id y claves de operación', () => {
     expect(() => started(0)).toThrow(InvalidValueError);
     expect(() => started(501)).toThrow(InvalidValueError);
-  });
-
-  it('el correlation_id debe ser un UUID', () => {
     expect(() => CorrelationId.parse('c-123')).toThrow(InvalidValueError);
   });
-});
 
-describe('SAGA exitosa', () => {
-  it('STARTED → RESERVING → DEBITING → ACTIVATING → CONFIRMING → COMPLETED', () => {
-    const statuses: string[] = [];
-    let saga = started().beginReservation(at(1));
-    statuses.push(saga.status);
-    while (!saga.isTerminal) {
-      saga = saga.completeCurrentStep(at(statuses.length * 10));
-      statuses.push(saga.status);
-    }
-
-    expect(statuses).toEqual(['RESERVING', 'DEBITING', 'ACTIVATING', 'CONFIRMING', 'COMPLETED']);
-    expect(saga.steps.ACTIVATION).toMatchObject({ status: 'SUCCEEDED', attempts: 1 });
-    expect(eventTypes(saga).at(-1)).toBe('SAGA_COMPLETED');
-    expect(saga.events.map((event) => event.sequence)).toEqual(
-      saga.events.map((_, index) => index),
-    );
-  });
-
-  it('cada transición devuelve una instancia nueva (inmutable)', () => {
-    const saga = started();
-    const reserving = saga.beginReservation(at(1));
-    expect(saga.status).toBe('STARTED');
-    expect(reserving).not.toBe(saga);
+  it('la misma clave exige la misma petición', () => {
+    expect(() => {
+      started().assertSameRequest(request());
+    }).not.toThrow();
+    expect(() => {
+      started().assertSameRequest(request(31));
+    }).toThrow(IdempotencyKeyConflictError);
   });
 });
 
-describe('Compensación por fondos insuficientes', () => {
-  it('DEBITING → COMPENSATING (solo release) → COMPENSATED', () => {
-    const compensating = inStatus('DEBITING').rejectCurrentStep('INSUFFICIENT_FUNDS', at(20));
+describe('avance', () => {
+  it('STARTED → RESERVATION_COMPLETED → BILLING_COMPLETED → DISPATCH_COMPLETED → COMPLETED', () => {
+    const statuses = [0, 1, 2, 3, 4].map((n) => advanced(n).status);
+    expect(statuses).toEqual([
+      'STARTED',
+      'RESERVATION_COMPLETED',
+      'BILLING_COMPLETED',
+      'DISPATCH_COMPLETED',
+      'COMPLETED',
+    ]);
+    expect(advanced(4).isTerminal).toBe(true);
+    expect(advanced(1).connectorPowerKw).toBe(60);
+  });
 
-    expect(compensating.status).toBe('COMPENSATING');
-    expect(compensating.failureReason).toBe('INSUFFICIENT_FUNDS');
-    expect(compensating.compensationPlan).toEqual(['RELEASE_RESERVATION']);
-    expect(compensating.nextCompensation).toBe('RELEASE_RESERVATION');
+  it('beginStep marca el paso IN_PROGRESS (intención) y cuenta el intento', () => {
+    const saga = started().beginStep(at(1));
+    expect(saga.steps.RESERVATION).toMatchObject({ status: 'IN_PROGRESS', attempts: 1 });
+    expect(saga.pendingEvents.at(-1)).toMatchObject({ type: 'STEP_STARTED', attempt: 1 });
+  });
 
-    const done = compensating.compensationSucceeded('RELEASE_RESERVATION', at(30));
-    expect(done.status).toBe('COMPENSATED');
-    expect(eventTypes(done).slice(-4)).toEqual([
-      'STEP_FAILED',
-      'COMPENSATION_STARTED',
-      'COMPENSATION_SUCCEEDED',
-      'SAGA_COMPENSATED',
+  it('no se completa un paso no intentado ni la reserva sin potencia', () => {
+    expect(() => started().completeStep(at(1))).toThrow(InvalidSagaTransitionError);
+    expect(() => started().beginStep(at(1)).completeStep(at(2))).toThrow(/connectorPowerKw/);
+  });
+
+  it('un fallo transitorio deja el paso PENDING con el error', () => {
+    const saga = started().beginStep(at(1)).recordStepAttemptFailure('TIMEOUT', at(2));
+    expect(saga.steps.RESERVATION).toMatchObject({
+      status: 'PENDING',
+      attempts: 1,
+      lastErrorCode: 'TIMEOUT',
+    });
+  });
+});
+
+describe('fallos y plan de compensación', () => {
+  it('plan según el paso y si el resultado es conocido', () => {
+    expect(compensationPlanFor('RESERVATION', true)).toEqual([]);
+    expect(compensationPlanFor('RESERVATION', false)).toEqual(['RELEASE_RESERVATION']);
+    expect(compensationPlanFor('DEBIT', true)).toEqual(['RELEASE_RESERVATION']);
+    expect(compensationPlanFor('ACTIVATION', true)).toEqual([
+      'REFUND_DEBIT',
+      'RELEASE_RESERVATION',
+    ]);
+    expect(compensationPlanFor('ACTIVATION', false)).toEqual([
+      'ABORT_SESSION',
+      'REFUND_DEBIT',
+      'RELEASE_RESERVATION',
     ]);
   });
-});
 
-describe('Compensación por fallo de hardware', () => {
-  it('ACTIVATING → abort → refund → release → COMPENSATED, en ese orden', () => {
-    let saga = inStatus('ACTIVATING').rejectCurrentStep('CHARGER_HARDWARE_FAULT', at(30));
-    expect(saga.compensationPlan).toEqual(['ABORT_SESSION', 'REFUND_DEBIT', 'RELEASE_RESERVATION']);
-
-    expect(() => saga.compensationSucceeded('REFUND_DEBIT', at(31))).toThrow(
-      InvalidSagaTransitionError,
-    );
-
-    saga = saga.compensationSucceeded('ABORT_SESSION', at(31));
-    saga = saga.compensationSucceeded('REFUND_DEBIT', at(32));
-    expect(saga.status).toBe('COMPENSATING');
-    saga = saga.compensationSucceeded('RELEASE_RESERVATION', at(33));
-
-    expect(saga.status).toBe('COMPENSATED');
-    expect(saga.failedStep).toBe('ACTIVATION');
+  it('reserva rechazada → FAILED sin compensaciones', () => {
+    const saga = started()
+      .beginStep(at(1))
+      .rejectStep('CONNECTOR_UNAVAILABLE', 'CONNECTOR_UNAVAILABLE', at(2));
+    expect(saga).toMatchObject({ status: 'FAILED', failureReason: 'CONNECTOR_UNAVAILABLE' });
   });
 
-  it('una compensación ya registrada no se puede registrar de nuevo', () => {
-    const saga = inStatus('ACTIVATING')
-      .rejectCurrentStep('CHARGER_HARDWARE_FAULT', at(30))
-      .compensationSucceeded('ABORT_SESSION', at(31));
-    expect(() => saga.compensationSucceeded('ABORT_SESSION', at(32))).toThrow(
+  it('un rechazo debe pertenecer al paso (o ser STEP_REJECTED)', () => {
+    const saga = advanced(1).beginStep(at(30));
+    expect(() => saga.rejectStep('CHARGER_HARDWARE_FAULT', 'X', at(31))).toThrow(
       InvalidSagaTransitionError,
     );
-  });
-});
-
-describe('Rechazos de negocio', () => {
-  it('rechazo en la reserva → FAILED sin compensaciones', () => {
-    const saga = inStatus('RESERVING').rejectCurrentStep('CONNECTOR_UNAVAILABLE', at(5));
-    expect(saga.status).toBe('FAILED');
-    expect(saga.compensationPlan).toEqual([]);
-    expect(eventTypes(saga).at(-1)).toBe('SAGA_FAILED');
-  });
-
-  it('el motivo debe corresponder al paso', () => {
-    expect(() => inStatus('RESERVING').rejectCurrentStep('INSUFFICIENT_FUNDS', at(5))).toThrow(
-      InvalidSagaTransitionError,
-    );
-    expect(() => inStatus('CONFIRMING').rejectCurrentStep('CHARGER_HARDWARE_FAULT', at(5))).toThrow(
-      InvalidSagaTransitionError,
+    expect(saga.rejectStep('STEP_REJECTED', 'IDEMPOTENCY_CONFLICT', at(31)).status).toBe(
+      'COMPENSATING',
     );
   });
-});
 
-describe('Errores transitorios y abandono', () => {
-  it('recordAttemptFailure cuenta intentos sin cambiar de estado', () => {
-    const saga = inStatus('DEBITING')
-      .recordAttemptFailure('TIMEOUT', at(20))
-      .recordAttemptFailure('SERVER_ERROR', at(21));
-    expect(saga.status).toBe('DEBITING');
-    expect(saga.steps.DEBIT).toMatchObject({
-      status: 'PENDING',
-      attempts: 2,
-      lastErrorCode: 'SERVER_ERROR',
+  it('fondos insuficientes → COMPENSATING con el plan y compensaciones PENDING', () => {
+    const saga = advanced(1)
+      .beginStep(at(30))
+      .rejectStep('INSUFFICIENT_FUNDS', 'INSUFFICIENT_FUNDS', at(31));
+    expect(saga).toMatchObject({
+      status: 'COMPENSATING',
+      failedStep: 'DEBIT',
+      compensationPlan: ['RELEASE_RESERVATION'],
     });
-
-    const completed = saga.completeCurrentStep(at(22));
-    expect(completed.steps.DEBIT).toMatchObject({ status: 'SUCCEEDED', attempts: 3 });
-  });
-
-  it('abandonar la reserva compensa con release preventivo y termina FAILED', () => {
-    const saga = inStatus('RESERVING').abandonCurrentStep('STEP_RETRIES_EXHAUSTED', at(5));
-    expect(saga.compensationPlan).toEqual(['RELEASE_RESERVATION']);
-    expect(saga.compensationSucceeded('RELEASE_RESERVATION', at(6)).status).toBe('FAILED');
-  });
-
-  it('abandonar el débito también reembolsa (resultado desconocido)', () => {
-    const saga = inStatus('DEBITING').abandonCurrentStep('RECOVERY_DEADLINE_EXCEEDED', at(5));
-    expect(saga.compensationPlan).toEqual(['REFUND_DEBIT', 'RELEASE_RESERVATION']);
-  });
-
-  it('tras el pivote no se compensa: abandonar CONFIRMING requiere atención', () => {
-    const saga = inStatus('CONFIRMING').abandonCurrentStep('STEP_RETRIES_EXHAUSTED', at(5));
-    expect(saga.status).toBe('REQUIRES_ATTENTION');
-  });
-
-  it('abandonar antes de empezar → FAILED', () => {
-    expect(started().abandonCurrentStep('RECOVERY_DEADLINE_EXCEEDED', at(5)).status).toBe('FAILED');
-  });
-
-  it('no se avanza una SAGA terminal', () => {
-    const failed = inStatus('RESERVING').rejectCurrentStep('CONNECTOR_UNAVAILABLE', at(5));
-    expect(() => failed.completeCurrentStep(at(6))).toThrow(InvalidSagaTransitionError);
-    expect(() => failed.markRecovered(at(6))).toThrow(InvalidSagaTransitionError);
+    expect(saga.steps.RELEASE_RESERVATION?.status).toBe('PENDING');
+    expect(saga.nextCompensation).toBe('RELEASE_RESERVATION');
   });
 });
 
-describe('Reintentos de compensación', () => {
-  const policy = new RetryPolicy({
-    maxAttempts: 2,
-    baseDelayMs: 1_000,
-    maxDelayMs: 10_000,
-    multiplier: 2,
+describe('compensación', () => {
+  const compensating = () =>
+    advanced(2)
+      .beginStep(at(40))
+      .rejectStep('CHARGER_HARDWARE_FAULT', 'CHARGER_HARDWARE_FAULT', at(41));
+
+  it('solo queda COMPENSATED cuando TODAS las compensaciones están verificadas', () => {
+    let saga = compensating().beginCompensation(at(50));
+    saga = saga.compensationSucceeded('REFUND_DEBIT', at(51));
+    expect(saga.status).toBe('COMPENSATING');
+    saga = saga.beginCompensation(at(52)).compensationSucceeded('RELEASE_RESERVATION', at(53));
+    expect(saga.status).toBe('COMPENSATED');
   });
 
-  it('un fallo programa el reintento (COMPENSATION_PENDING) y se reanuda a su hora', () => {
-    const compensating = inStatus('DEBITING').rejectCurrentStep('INSUFFICIENT_FUNDS', at(20));
-    const pending = compensating.compensationFailed(
-      'RELEASE_RESERVATION',
-      'TIMEOUT',
-      at(30),
-      policy,
-      random,
+  it('respeta el orden del plan', () => {
+    const saga = compensating().beginCompensation(at(50));
+    expect(() => saga.compensationSucceeded('RELEASE_RESERVATION', at(51))).toThrow(
+      InvalidSagaTransitionError,
     );
+  });
 
-    expect(pending.status).toBe('COMPENSATION_PENDING');
-    expect(pending.nextAttemptAt).toEqual(at(30 + 750)); // 1000 × (0,5 + 0,5 × 0,5)
-    expect(() => pending.resumeCompensation(at(100))).toThrow(InvalidSagaTransitionError);
+  it('compensación fallida → COMPENSATION_FAILED con paso, error y reintento si es recuperable', () => {
+    const saga = compensating()
+      .beginCompensation(at(50))
+      .compensationFailed(
+        'REFUND_DEBIT',
+        { errorCode: 'HTTP_503', retryable: true },
+        at(51),
+        ROUNDS,
+        random,
+      );
+    expect(saga.status).toBe('COMPENSATION_FAILED');
+    expect(saga.compensationFailure).toMatchObject({
+      step: 'REFUND_DEBIT',
+      errorCode: 'HTTP_503',
+      round: 1,
+    });
+    expect(saga.compensationFailure?.nextAttemptAt).toEqual(at(51 + 3_750));
+    expect(saga.isTerminal).toBe(false);
+    expect(saga.isDueForRecovery(at(1_000), 15_000)).toBe(false);
+    expect(saga.isDueForRecovery(at(51 + 3_750), 15_000)).toBe(true);
+  });
 
-    const resumed = pending.resumeCompensation(at(780));
+  it('un error no recuperable no programa reintento automático', () => {
+    const saga = compensating()
+      .beginCompensation(at(50))
+      .compensationFailed(
+        'REFUND_DEBIT',
+        { errorCode: 'DEBIT_MISMATCH', retryable: false },
+        at(51),
+        ROUNDS,
+        random,
+      );
+    expect(saga.compensationFailure?.nextAttemptAt).toBeUndefined();
+    expect(() => saga.retryCompensation(at(10_000_000), 'AUTOMATIC')).toThrow(
+      SagaNotRetryableError,
+    );
+    const resumed = saga.retryCompensation(at(60), 'MANUAL');
     expect(resumed.status).toBe('COMPENSATING');
-    expect(resumed.nextAttemptAt).toBeUndefined();
-    expect(resumed.compensationSucceeded('RELEASE_RESERVATION', at(800)).status).toBe(
-      'COMPENSATED',
-    );
+    expect(resumed.compensationFailure).toBeUndefined();
+    expect(resumed.nextCompensation).toBe('REFUND_DEBIT');
   });
 
-  it('agotadas las rondas → REQUIRES_ATTENTION', () => {
-    const saga = inStatus('DEBITING')
-      .rejectCurrentStep('INSUFFICIENT_FUNDS', at(20))
-      .compensationFailed('RELEASE_RESERVATION', 'TIMEOUT', at(30), policy, random)
-      .resumeCompensation(at(10_000))
-      .compensationFailed('RELEASE_RESERVATION', 'TIMEOUT', at(10_001), policy, random);
-
-    expect(saga.status).toBe('REQUIRES_ATTENTION');
-    expect(saga.nextAttemptAt).toBeUndefined();
-    expect(saga.steps.RELEASE_RESERVATION?.attempts).toBe(2);
+  it('solo se reintenta una SAGA en COMPENSATION_FAILED', () => {
+    expect(() => advanced(4).retryCompensation(at(1), 'MANUAL')).toThrow(SagaNotRetryableError);
   });
 });
 
-describe('Recuperación tras reinicio', () => {
-  it('detecta SAGAs sin actividad reciente y reintentos vencidos', () => {
-    const saga = inStatus('DEBITING');
-    expect(saga.isDueForRecovery(at(5_000), 15_000)).toBe(false);
-    expect(saga.isDueForRecovery(at(20_000), 15_000)).toBe(true);
-
-    const policy = RetryPolicy.COMPENSATION;
-    const pending = saga
-      .rejectCurrentStep('INSUFFICIENT_FUNDS', at(20))
-      .compensationFailed('RELEASE_RESERVATION', 'TIMEOUT', at(30), policy, random);
-    expect(pending.isDueForRecovery(at(31), 15_000)).toBe(false);
-    expect(pending.isDueForRecovery(pending.nextAttemptAt!, 15_000)).toBe(true);
+describe('recuperación', () => {
+  it('una SAGA inactiva se retoma; las terminales no', () => {
+    expect(advanced(2).isDueForRecovery(at(10_000), 15_000)).toBe(false);
+    expect(advanced(2).isDueForRecovery(at(16_000), 15_000)).toBe(true);
+    expect(advanced(4).isDueForRecovery(at(1_000_000), 15_000)).toBe(false);
+    expect(advanced(2).markRecovered(at(20_000)).pendingEvents.at(-1)?.type).toBe('RECOVERED');
   });
 
-  it('pasado el plazo de avance se compensa, salvo tras el pivote', () => {
-    expect(inStatus('ACTIVATING').exceedsForwardDeadline(at(61_000), 60_000)).toBe(true);
-    expect(inStatus('ACTIVATING').exceedsForwardDeadline(at(59_000), 60_000)).toBe(false);
-    expect(inStatus('CONFIRMING').exceedsForwardDeadline(at(61_000), 60_000)).toBe(false);
-  });
-
-  it('markRecovered añade el evento RECOVERED sin cambiar el estado', () => {
-    const saga = inStatus('DEBITING').markRecovered(at(30_000));
-    expect(saga.status).toBe('DEBITING');
-    expect(eventTypes(saga).at(-1)).toBe('RECOVERED');
+  it('el plazo de avance solo aplica antes del pivote', () => {
+    expect(advanced(2).exceedsForwardDeadline(at(61_000), 60_000)).toBe(true);
+    expect(advanced(3).exceedsForwardDeadline(at(61_000), 60_000)).toBe(false);
   });
 
   it('restore valida las invariantes', () => {
-    const base = inStatus('DEBITING');
-    const props = {
-      id: base.id,
-      request: base.request,
-      resources: base.resources,
-      correlationId: base.correlationId,
-      steps: base.steps,
-      events: base.events,
-      createdAt: base.createdAt,
-      updatedAt: base.updatedAt,
-    };
-    expect(() =>
-      SagaTransaction.restore({ ...props, status: 'COMPENSATING', compensationPlan: [] }),
-    ).toThrow(InvalidValueError);
+    const saga = advanced(1);
     expect(() =>
       SagaTransaction.restore({
-        ...props,
-        status: 'COMPLETED',
-        compensationPlan: [],
-        nextAttemptAt: NOW,
+        id: saga.id,
+        idempotencyKey: saga.idempotencyKey,
+        request: saga.request,
+        resources: saga.resources,
+        operationKeys: saga.operationKeys,
+        correlationId: saga.correlationId,
+        status: 'COMPENSATION_FAILED',
+        steps: saga.steps,
+        compensationPlan: ['RELEASE_RESERVATION'],
+        compensationRounds: 1,
+        eventCount: 3,
+        createdAt: NOW,
+        updatedAt: NOW,
       }),
-    ).toThrow(InvalidValueError);
-    expect(
-      SagaTransaction.restore({ ...props, status: 'DEBITING', compensationPlan: [] }).status,
-    ).toBe('DEBITING');
-  });
-});
-
-describe('compensationPlanFor', () => {
-  it.each([
-    ['RESERVATION', true, []],
-    ['RESERVATION', false, ['RELEASE_RESERVATION']],
-    ['DEBIT', true, ['RELEASE_RESERVATION']],
-    ['DEBIT', false, ['REFUND_DEBIT', 'RELEASE_RESERVATION']],
-    ['ACTIVATION', true, ['ABORT_SESSION', 'REFUND_DEBIT', 'RELEASE_RESERVATION']],
-  ] as const)('%s (resultado conocido: %s) → %j', (step, known, plan) => {
-    expect(compensationPlanFor(step, known)).toEqual(plan);
+    ).toThrow(/compensationFailure/);
   });
 });

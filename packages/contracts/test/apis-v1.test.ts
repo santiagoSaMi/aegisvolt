@@ -303,6 +303,25 @@ describe('saga-orchestrator v1', () => {
     }
   });
 
+  it('1.1.0: estados por hito, terminales y COMPENSATION_FAILED recuperable', () => {
+    expect(api.SAGA_STATUSES).toEqual([
+      'STARTED',
+      'RESERVATION_COMPLETED',
+      'BILLING_COMPLETED',
+      'DISPATCH_COMPLETED',
+      'COMPLETED',
+      'COMPENSATING',
+      'COMPENSATED',
+      'FAILED',
+      'COMPENSATION_FAILED',
+    ]);
+    expect(api.TERMINAL_SAGA_STATUSES).not.toContain('COMPENSATION_FAILED');
+    expect(api.SAGA_STEP_STATUSES).toContain('IN_PROGRESS');
+    expect(api.paths.retryCompensation(ids.sagaId)).toBe(
+      `/v1/sagas/${ids.sagaId}/compensation/retry`,
+    );
+  });
+
   it('la lista de SAGAs exige fleetId', () => {
     expect(api.listSagasQuerySchema.safeParse({}).success).toBe(false);
     expect(api.listSagasQuerySchema.parse({ fleetId: ids.fleetId })).toEqual({

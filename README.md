@@ -12,6 +12,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
 | station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
 | billing-wallet-service | Implementado con libro mayor atómico, reembolsos como operación propia y pruebas de integración en Floci ([README](services/billing-wallet/README.md), [ADR-0022](docs/adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md)) |
+| saga-orchestrator-service | SAGA `ReserveAndActivateCharging` orquestada, con persistencia antes y después de cada paso, lease, compensaciones verificadas y recuperación; E2E con los cuatro servicios reales en Floci ([README](services/saga-orchestrator/README.md), [ADR-0024](docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md), [runbook](docs/runbooks/saga-demo.md)) |
 | energy-dispatch-service | Implementado con puerto `ChargerAdapter`, cargador simulado, falla inducida por flag desde la tabla de flags del ambiente, telemetría y pruebas de integración en Floci ([README](services/energy-dispatch/README.md), [ADR-0023](docs/adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)) |
 
 ## Requisitos
@@ -40,6 +41,7 @@ pnpm check                    # formato + lint + typecheck + pruebas + build (lo
 | `pnpm typecheck` | Compila `packages/*` y ejecuta `tsc --noEmit` en cada proyecto |
 | `pnpm test` | Ejecuta las pruebas de todos los proyectos con Vitest (sin dependencias externas) |
 | `pnpm test:integration` | Pruebas de integración contra Floci (`scripts/floci/start.sh` antes). Se omiten si Floci no responde, salvo con `REQUIRE_INTEGRATION=true` |
+| `pnpm test:e2e` | E2E de la SAGA: levanta los cuatro servicios contra Floci y guarda la evidencia de DynamoDB en `tests/e2e/.evidence/` |
 | `pnpm lint` | ESLint con reglas de tipos (`--max-warnings=0`) + dependency-cruiser (ciclos, capas y límites entre servicios) |
 | `pnpm lint:code` / `pnpm lint:deps` | Cada una de las dos partes de `lint` por separado |
 | `pnpm format` / `pnpm format:check` | Aplica o verifica Prettier (el Markdown queda excluido para preservar la documentación) |
@@ -78,7 +80,7 @@ Si modificas un paquete de `packages/*` y lo consume una app en modo `dev`, reco
 | `packages/config` | `@aegisvolt/config` | — | Configuración validada por entorno |
 | `packages/feature-flags` | `@aegisvolt/feature-flags` | — | Lectura de flags por ambiente desde DynamoDB con caché (ADR-0007) |
 | `prefect/` | — | — | Flujos de observabilidad (Python, fase posterior) |
-| `tests/e2e/` | — | — | Pruebas E2E (fase posterior) |
+| `tests/e2e/` | `@aegisvolt/e2e-tests` | — | E2E de la SAGA con los cuatro servicios reales contra Floci |
 | `infra/` | — | — | Floci local, Terraform y Kubernetes |
 | `scripts/` | — | — | Scripts operativos (Floci, `flags/set.sh` para flags locales) |
 | `.github/workflows/` | — | — | CI/CD (fase posterior) |

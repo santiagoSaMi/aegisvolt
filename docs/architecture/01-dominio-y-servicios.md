@@ -156,7 +156,7 @@ flowchart LR
 | Estado | Sin estado de negocio (solo el módulo de flags) | Estado persistente de cada SAGA |
 | Lógica | Autenticación, autorización, validación, composición de lecturas | Secuencia de pasos, decisión de compensar, reintentos, recuperación |
 | Mutación `reserveAndStartCharging` | Valida la entrada y la flota del usuario, y llama `POST /sagas` con `idempotencyKey` | Crea la SAGA, la ejecuta y devuelve su estado |
-| Fallos | Traduce errores a `errors[].extensions.code` | Decide entre `COMPLETED`, `COMPENSATED`, `FAILED` y `REQUIRES_ATTENTION` |
+| Fallos | Traduce errores a `errors[].extensions.code` | Decide entre `COMPLETED`, `COMPENSATED`, `FAILED` y `COMPENSATION_FAILED` (recuperable) |
 
 Esquema GraphQL orientativo (la versión definitiva se fija al implementar):
 

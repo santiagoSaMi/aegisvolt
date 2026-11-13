@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ABANDON_REASONS,
   BUSINESS_REJECTIONS,
+  GENERIC_REJECTION,
   COMPENSATION_STEPS,
   FORWARD_STEPS,
   SAGA_EVENT_TYPES,
@@ -30,7 +31,11 @@ describe('alineación dominio ↔ contrato saga-orchestrator v1', () => {
   });
 
   it('los motivos de fallo del dominio son los publicados', () => {
-    const domainReasons = [...Object.values(BUSINESS_REJECTIONS).flat(), ...ABANDON_REASONS];
+    const domainReasons = [
+      ...Object.values(BUSINESS_REJECTIONS).flat(),
+      GENERIC_REJECTION,
+      ...ABANDON_REASONS,
+    ];
     expect(domainReasons.sort()).toEqual([...sagaOrchestratorV1.SAGA_FAILURE_REASONS].sort());
   });
 });
