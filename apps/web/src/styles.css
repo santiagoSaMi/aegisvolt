@@ -1,0 +1,38 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.env-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #64748b;
+  color: #fff;
+}
+
+.env-badge--dev {
+  background: #2563eb;
+}
+
+.env-badge--test {
+  background: #d97706;
+}
+
+.env-badge--prod {
+  background: #dc2626;
+}
