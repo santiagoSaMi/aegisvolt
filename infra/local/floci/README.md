@@ -151,6 +151,12 @@ Floci **2.4.0**, ejecución completa `smoke-test.sh --with-eks` + `terraform-che
 | IAM / STS | **parcial** | `create-role/user/access-key` y `get-caller-identity` funcionan. Según la documentación, Floci autentica pero no evalúa políticas (p. ej. `execute-api:Invoke`). |
 | Terraform (provider + backend S3) | **funcional** | init/validate/plan/apply. Estado en `env:/<workspace>/` con versionado y `use_lockfile`; sin drift. |
 | Persistencia (`persistent`) | **funcional** | S3, DynamoDB y Logs sobreviven a stop/start. |
+| DynamoDB transacciones, PITR y deletion protection | **funcional** | `TransactWriteItems` atómico con condiciones; PITR `ENABLED`; `DeleteTable` bloqueado con protección (verificado manualmente el 2026-11-12). |
+| ELBv2 NLB + VPC Link | **funcional** | Listener del NLB dentro del contenedor de Floci (`floci:<puerto>`) reenvía a *targets* `ip`. Cadena API Gateway → VPC Link → NLB → NodePort k3s → pod = 200 (manual, 2026-11-12). |
+| Cognito User Pools | **funcional** | `initiate-auth` → JWT RS256 con grupos y atributos custom; JWKS en `/<poolId>/.well-known/jwks.json` (manual, 2026-11-12). |
+| CloudWatch Metrics | **parcial** | `put-metric-data`, `get-metric-statistics` y metric filters funcionan; *metric math* no (manual, 2026-11-12). |
+| EKS endpoint privado | **solo metadatos** | `endpointPublicAccess=false` se guarda, pero `kubectl` accede desde el host. |
+| Pod → Floci | **parcial** | Por IP sí; el DNS `floci` no resuelve dentro de k3s. Solución: Service sin selector ([ADR-0012](../../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md)). |
 
 Ver [`docs/limitations.md`](../../../docs/limitations.md) para el impacto en los requisitos de la especificación.
 

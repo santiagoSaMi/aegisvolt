@@ -7,6 +7,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | Fase | Estado |
 | --- | --- |
 | Entorno local AWS con Floci | Listo. Ver [`infra/local/floci/README.md`](infra/local/floci/README.md) |
+| Diseño de arquitectura | Documentado en [`docs/architecture/`](docs/architecture/README.md), ADR 0002–0017; decisiones pendientes en [09](docs/architecture/09-analisis-especificacion.md) |
 
 ## Inicio rápido (entorno local)
 
@@ -22,5 +23,6 @@ Todo el desarrollo apunta a Floci con credenciales ficticias. **Nunca** se aprov
 
 ## Documentación
 
+- [Arquitectura](docs/architecture/README.md)
 - [ADR](docs/adr/)
 - [Limitaciones conocidas del entorno local](docs/limitations.md)

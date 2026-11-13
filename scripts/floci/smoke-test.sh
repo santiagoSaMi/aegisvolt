@@ -53,11 +53,21 @@ CLEANUP=()
 on_cleanup() { CLEANUP+=("$*"); }
 run_cleanup() {
   if $KEEP; then log_warn "--keep: recursos conservados con prefijo ${P}"; return; fi
-  local i
-  for (( i=${#CLEANUP[@]}-1; i>=0; i-- )); do
-    eval "${CLEANUP[$i]}" >/dev/null 2>&1 || log_warn "limpieza falló: ${CLEANUP[$i]}"
+  local idx failed=0 clog="${FLOCI_TMP_DIR}/smoke-cleanup.log"
+  : > "$clog"
+  for (( idx=${#CLEANUP[@]}-1; idx>=0; idx-- )); do
+    echo "+ ${CLEANUP[$idx]}" >>"$clog"
+    # Subshell: el comando evaluado no puede alterar variables de este bucle.
+    if ! ( eval "${CLEANUP[$idx]}" ) </dev/null >>"$clog" 2>&1; then
+      failed=$((failed + 1))
+      log_warn "limpieza falló: ${CLEANUP[$idx]:0:100} -> $(tail -n1 "$clog")"
+    fi
   done
   rm -rf "$WORK"
+  if (( failed > 0 )); then
+    log_error "Limpieza incompleta (${failed} fallos). Detalle en ${clog}"
+    exit 1
+  fi
   log_info "Limpieza de recursos temporales ${P}* completada."
 }
 trap run_cleanup EXIT
