@@ -16,13 +16,14 @@ import {
   citySchema,
   compensationReasonSchema,
   isoDateTimeSchema,
+  paginationQuerySchema,
   powerKwSchema,
 } from '../common/primitives.ts';
 import { COMMON_ERROR_CODES, problemSchemaFor } from '../problem-details.ts';
 
 export const API = {
   name: 'station-reservation',
-  version: '1.1.0',
+  version: '1.2.0',
   basePath: '/v1',
 } as const;
 
@@ -175,6 +176,16 @@ export const holdReservationResponseSchema = reservationViewSchema;
 export const createReservationRequestSchema = holdReservationRequestSchema;
 
 /** `GET /v1/reservations/{reservationId}` → `reservationViewSchema` (estado efectivo). */
+
+/**
+ * `GET /v1/reservations?fleetId=&limit=&cursor=` (desde 1.2.0): reservas de una
+ * flota, la más reciente primero, con su estado efectivo. Cursor opaco.
+ */
+export const listReservationsQuerySchema = paginationQuerySchema.extend({ fleetId: fleetIdSchema });
+export const listReservationsResponseSchema = z.object({
+  items: z.array(reservationViewSchema),
+  nextCursor: z.string().optional(),
+});
 
 /**
  * `POST /v1/reservations/{reservationId}/confirm` → 200 `reservationViewSchema` (CONFIRMED;

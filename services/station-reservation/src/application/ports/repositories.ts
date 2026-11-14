@@ -2,6 +2,7 @@ import type {
   ChargingConnector,
   City,
   ConnectorId,
+  FleetId,
   Reservation,
   ReservationId,
   ReservationTombstone,
@@ -52,6 +53,12 @@ export interface ReservationRepository {
   ): Promise<Versioned<ChargingConnector> | undefined>;
 
   findReservation(reservationId: ReservationId): Promise<StoredReservation | undefined>;
+
+  /** Reservas de una flota, la más reciente primero (paginado por cursor opaco). */
+  listReservationsByFleet(
+    fleetId: FleetId,
+    page: { limit: number; cursor?: string | undefined },
+  ): Promise<{ items: readonly Reservation[]; nextCursor?: string }>;
 
   /**
    * Bloqueo del conector + alta de la reserva (+ marca EXPIRED de la reserva

@@ -5,6 +5,7 @@ import {
   CreateReservation,
   GetAvailableConnectors,
   GetReservation,
+  ListFleetReservations,
   GetStation,
   ListStations,
   RegisterStation,
@@ -41,5 +42,6 @@ export function createUseCases(deps: {
     confirmReservation: new ConfirmReservation({ reservations, clock }),
     releaseReservation: new ReleaseReservation({ reservations, clock }),
     getReservation: new GetReservation({ reservations, clock }),
+    listFleetReservations: new ListFleetReservations({ reservations, clock }),
   };
 }

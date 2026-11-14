@@ -32,6 +32,7 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 | — | [Contratos de integración](../contracts/README.md) | Peticiones, respuestas, errores, cabeceras, idempotencia y versiones |
 | — | [Runbook: demostración de la SAGA](../runbooks/saga-demo.md) | Evidencia de DynamoDB (Floci) de éxito, fallos, compensaciones y recuperación |
 | — | [Runbook: feature flags por ambiente](../runbooks/feature-flags-demo.md) | Cambio en `dev` sin redesplegar; `test` y `prod` intactos (Floci) |
+| — | [Guía de uso del GraphQL API](../graphql/README.md) | Autenticación, consultas, mutaciones, errores y límites, con ejemplos |
 
 ## Estructura del monorepo
 
@@ -79,5 +80,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0023](../adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md) | energy-dispatch: puerto del cargador, falla simulada por flag, telemetría y apagado ordenado | Aceptado |
 | [0024](../adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md) | SAGA orquestada: estados por hito, persistencia antes y después, lease y recuperación | Aceptado (sustituye los estados de ADR-0003) |
 | [0025](../adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md) | Feature flags por ambiente: catálogo único, ambiente del despliegue, escritura autorizada y auditada | Aceptado |
+| [0026](../adr/0026-graphql-api-apollo-bff-autenticacion-resiliencia.md) | graphql-api: Apollo Server como BFF, autenticación Cognito, errores y resiliencia de llamadas internas | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

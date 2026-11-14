@@ -29,6 +29,21 @@ ls tests/e2e/.evidence/                    # JSON por escenario (summary + ítem
 
 `E2E_KEEP_TABLES=true` conserva las tablas para inspeccionarlas con `aws dynamodb`. El análisis de la evidencia está en el [runbook](../../docs/runbooks/saga-demo.md).
 
+## GraphQL API de punta a punta (implementado)
+
+`test/graphql.e2e.test.ts` levanta además el **graphql-api** y crea en Floci un **User Pool de Cognito**: grupos, un administrador y dos operadores de flotas distintas con `custom:fleet_id`. Todas las peticiones llevan **ID tokens reales** emitidos por Cognito.
+
+| Escenario | Qué se verifica |
+| --- | --- |
+| Autenticación | Sin token o con un token alterado → `UNAUTHENTICATED` |
+| Consultas | Catálogo, billetera, flags (`environment: local`) |
+| Autorización | Un operador no ve otra flota; un administrador sí; `updateFeatureFlag` solo para el administrador |
+| `reserveAndActivateCharging` | SAGA `COMPLETED`; repetición con la misma clave = misma SAGA; `correlation_id` en los logs de los cinco procesos y en el libro mayor |
+| Consultas de seguimiento | `sagaStatus` + eventos, `reservations`, `transactions`, `chargingSessions`, `chargingSessionById` |
+| `releaseReservation` / `stopChargingSession` | `CONFLICT` con la carga activa; parada y liberación (conector `AVAILABLE`); liberación repetida `ALREADY_RELEASED` |
+| Falla inducida por flag | El administrador activa `SIMULATE_CHARGER_HARDWARE_FAULT` por GraphQL → SAGA `COMPENSATED`, débito `REFUNDED`, saldo restituido |
+| Validación | Entradas inválidas → `BAD_USER_INPUT` |
+
 ## Pendiente
 
-Flujo completo desde el frontend y la API GraphQL (autorización por flota, flag cambiada en caliente vista en la SPA), contra un stack `docker compose` en el check `e2e-tests` de CI.
+Flujo completo desde el frontend (SPA), contra un stack `docker compose` en el check `e2e-tests` de CI.

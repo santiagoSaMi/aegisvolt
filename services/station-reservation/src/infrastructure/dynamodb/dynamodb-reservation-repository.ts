@@ -1,19 +1,22 @@
 import {
   GetCommand,
   PutCommand,
+  QueryCommand,
   TransactWriteCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 
-import type {
-  ReservationRepository,
-  StoredReservation,
-  Versioned,
-  VersionedUpdate,
+import {
+  InvalidCursorError,
+  type ReservationRepository,
+  type StoredReservation,
+  type Versioned,
+  type VersionedUpdate,
 } from '../../application/index.ts';
 import type {
   ChargingConnector,
   ConnectorId,
+  FleetId,
   Reservation,
   ReservationId,
   ReservationTombstone,
@@ -31,7 +34,7 @@ import {
   type ReservationItem,
   type TombstoneItem,
 } from './mappers.ts';
-import { ENTITY, keys } from './table.ts';
+import { ENTITY, GSI2, keys } from './table.ts';
 
 type TransactItem = NonNullable<
   ConstructorParameters<typeof TransactWriteCommand>[0]['TransactItems']
@@ -72,6 +75,32 @@ export class DynamoDbReservationRepository implements ReservationRepository {
     }
     const item = Item as ConnectorItem;
     return { value: fromConnectorItem(item), version: item.version };
+  }
+
+  async listReservationsByFleet(
+    fleetId: FleetId,
+    page: { limit: number; cursor?: string | undefined },
+  ): Promise<{ items: readonly Reservation[]; nextCursor?: string }> {
+    const partition = keys.fleetPartition(fleetId);
+    const startKey = page.cursor === undefined ? undefined : decodeCursor(page.cursor, partition);
+    const result = await dynamo(() =>
+      this.db.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: GSI2,
+          KeyConditionExpression: 'GSI2PK = :pk',
+          ExpressionAttributeValues: { ':pk': partition },
+          ScanIndexForward: false,
+          Limit: page.limit,
+          ExclusiveStartKey: startKey,
+        }),
+      ),
+    );
+    const items = ((result.Items ?? []) as ReservationItem[]).map(fromReservationItem);
+    const last = result.LastEvaluatedKey;
+    return last === undefined
+      ? { items }
+      : { items, nextCursor: Buffer.from(JSON.stringify(last)).toString('base64url') };
   }
 
   async findReservation(reservationId: ReservationId): Promise<StoredReservation | undefined> {
@@ -224,4 +253,22 @@ export class DynamoDbReservationRepository implements ReservationRepository {
   private async transact(transactItems: TransactItem[]): Promise<void> {
     await dynamo(() => this.db.send(new TransactWriteCommand({ TransactItems: transactItems })));
   }
+}
+
+/** Cursor opaco (clave de la última fila, base64url), validado contra la partición de la flota. */
+function decodeCursor(cursor: string, partition: string): Record<string, unknown> {
+  try {
+    const key = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown;
+    if (
+      typeof key === 'object' &&
+      key !== null &&
+      (key as Record<string, unknown>).GSI2PK === partition &&
+      typeof (key as Record<string, unknown>).PK === 'string'
+    ) {
+      return key as Record<string, unknown>;
+    }
+  } catch {
+    // cursor ilegible
+  }
+  throw new InvalidCursorError('cursor de paginación inválido');
 }

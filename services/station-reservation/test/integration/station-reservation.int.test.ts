@@ -294,5 +294,29 @@ describe.skipIf(!flociAvailable)(
       });
       expect(await rawReservation(resId(7))).toMatchObject({ status: 'CONFIRMED' });
     });
+
+    it('listado por flota (GSI2): solo las reservas de esa flota, la más reciente primero, paginado', async () => {
+      const response = await fetch(`${url}/v1/reservations?fleetId=fleet_001&limit=2`);
+      expect(response.status).toBe(200);
+      const page = stationReservationV1.listReservationsResponseSchema.parse(await response.json());
+      expect(page.items).toHaveLength(2);
+      expect(page.items.every((r) => r.fleetId === 'fleet_001')).toBe(true);
+      expect(page.items[0]!.createdAt >= page.items[1]!.createdAt).toBe(true);
+      expect(page.nextCursor).toBeDefined();
+      expect(await rawReservation(page.items[0]!.reservationId)).toMatchObject({
+        GSI2PK: 'FLEET#fleet_001',
+      });
+
+      const next = await fetch(
+        `${url}/v1/reservations?fleetId=fleet_001&limit=2&cursor=${page.nextCursor ?? ''}`,
+      );
+      expect(next.status).toBe(200);
+      const forged = await fetch(
+        `${url}/v1/reservations?fleetId=fleet_otra&cursor=${page.nextCursor ?? ''}`,
+      );
+      expect(forged.status).toBe(400);
+      const empty = await fetch(`${url}/v1/reservations?fleetId=fleet_sin-reservas`);
+      expect(await empty.json()).toEqual({ items: [] });
+    });
   },
 );

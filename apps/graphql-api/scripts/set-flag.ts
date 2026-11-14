@@ -8,7 +8,7 @@ import { userInfo } from 'node:os';
 
 import { ADMIN_GROUP } from '../src/application/index.ts';
 import { createFlagUseCases } from '../src/composition.ts';
-import { loadServiceConfig } from '../src/config.ts';
+import { loadFlagsConfig } from '../src/config.ts';
 import { createDynamoDbClients } from '../src/infrastructure/aws/dynamodb-client.ts';
 import { SystemClock } from '../src/infrastructure/system/system-clock.ts';
 
@@ -27,7 +27,7 @@ if (key === undefined || (value !== 'true' && value !== 'false')) {
   process.exit(2);
 }
 
-const config = loadServiceConfig(process.env);
+const config = loadFlagsConfig(process.env);
 const { client, documentClient } = createDynamoDbClients({
   region: config.aws.region,
   endpointUrl,

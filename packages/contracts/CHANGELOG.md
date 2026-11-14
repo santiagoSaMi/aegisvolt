@@ -2,6 +2,12 @@
 
 Formato: una sección por contrato y versión. Política de versionado: [docs/contracts/README.md](../../docs/contracts/README.md#versionado).
 
+## 2026-11-13 — station-reservation 1.2.0
+
+Cambio compatible (*minor*) para la query `reservations` del graphql-api (ADR-0026):
+
+- `GET /v1/reservations?fleetId=&limit=&cursor=` (`listReservationsQuerySchema`, `listReservationsResponseSchema`): reservas de una flota, la más reciente primero, con estado efectivo. Usa el GSI2 `FLEET#<fleetId>` de la tabla del servicio.
+
 ## 2026-11-13 — feature-flags 1.1.0
 
 Cambios al implementar el sistema de flags (ADR-0025). Todos compatibles (*minor*):

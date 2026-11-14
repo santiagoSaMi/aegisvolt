@@ -111,6 +111,21 @@ describe('reservas', () => {
     expect(await replay.json()).toEqual(JSON.parse(JSON.stringify(view)));
   });
 
+  it('GET /v1/reservations?fleetId lista las reservas de la flota; fleetId obligatorio', async () => {
+    const url = await start();
+    await fetch(`${url}/v1/reservations/${RES_A}`, {
+      method: 'PUT',
+      headers: sagaHeaders(),
+      body: holdBody(),
+    });
+
+    const list = await fetch(`${url}/v1/reservations?fleetId=fleet_001`);
+    const page = stationReservationV1.listReservationsResponseSchema.parse(await list.json());
+    expect(page.items.map((r) => r.reservationId)).toEqual([RES_A]);
+    expect((await fetch(`${url}/v1/reservations`)).status).toBe(400);
+    expect((await fetch(`${url}/v1/reservations?fleetId=fleet_001&limit=500`)).status).toBe(400);
+  });
+
   it('PUT con el mismo id y otros datos → 409 IDEMPOTENCY_CONFLICT', async () => {
     const url = await start();
     await fetch(`${url}/v1/reservations/${RES_A}`, {

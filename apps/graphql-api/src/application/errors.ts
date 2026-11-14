@@ -36,6 +36,56 @@ export class ConcurrentModificationError extends ApplicationError {
   readonly code = 'CONCURRENT_MODIFICATION';
 }
 
+/** El recurso pedido no existe (o no es visible para quien llama). */
+export class NotFoundError extends ApplicationError {
+  readonly code = 'NOT_FOUND';
+}
+
+/**
+ * La operación no es válida en el estado actual (regla del BFF), p. ej. liberar
+ * una reserva cuya SAGA sigue en curso. `reason` es un código estable.
+ */
+export class OperationConflictError extends ApplicationError {
+  readonly code = 'CONFLICT';
+  readonly reason: string;
+
+  constructor(reason: string, message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
+
+/**
+ * Un servicio rechazó la petición (4xx). Se conserva su status y su `code`
+ * (catálogo de su contrato) para que el cliente sepa por qué, sin detalles internos.
+ */
+export class UpstreamRejectedError extends ApplicationError {
+  readonly code = 'UPSTREAM_REJECTED';
+  readonly service: string;
+  readonly status: number;
+  readonly upstreamCode: string;
+  readonly detail: string | undefined;
+
+  constructor(input: { service: string; status: number; upstreamCode: string; detail?: string }) {
+    super(`${input.service} rechazó la petición: ${input.upstreamCode}`);
+    this.service = input.service;
+    this.status = input.status;
+    this.upstreamCode = input.upstreamCode;
+    this.detail = input.detail;
+  }
+}
+
+/** Un servicio no respondió a tiempo o falló (tras los reintentos permitidos). */
+export class UpstreamUnavailableError extends ApplicationError {
+  readonly code = 'UPSTREAM_UNAVAILABLE';
+  readonly service: string;
+
+  constructor(service: string, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.service = service;
+  }
+}
+
 /** DynamoDB no respondió o rechazó la petición por capacidad. */
 export class DependencyUnavailableError extends ApplicationError {
   readonly code = 'SERVICE_UNAVAILABLE';
