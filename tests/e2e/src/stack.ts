@@ -10,7 +10,11 @@ import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
-import { featureFlagKeys, featureFlagsTableDefinition } from '@aegisvolt/feature-flags';
+import {
+  FEATURE_FLAG_CATALOG,
+  featureFlagKeys,
+  featureFlagsTableDefinition,
+} from '@aegisvolt/feature-flags';
 import {
   CreateTableCommand,
   DeleteTableCommand,
@@ -18,6 +22,8 @@ import {
   waitUntilTableExists,
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+
+import { CognitoFixture, type TestUser } from './cognito.ts';
 
 export const FLOCI_ENDPOINT = process.env.E2E_AWS_ENDPOINT_URL ?? 'http://localhost:4566';
 if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(FLOCI_ENDPOINT)) {
@@ -48,7 +54,18 @@ export async function flociAvailable(): Promise<boolean> {
 }
 
 export type ServiceName =
-  'station-reservation' | 'billing-wallet' | 'energy-dispatch' | 'saga-orchestrator';
+  | 'station-reservation'
+  | 'billing-wallet'
+  | 'energy-dispatch'
+  | 'saga-orchestrator'
+  | 'graphql-api';
+
+/** Usuarios de Cognito del stack E2E (flotas propias de las pruebas GraphQL). */
+export const E2E_USERS = {
+  admin: { username: 'e2e-admin', group: 'platform-admins' },
+  operatorAlfa: { username: 'e2e-op-alfa', group: 'fleet-operators', fleetId: 'fleet_gql-alfa' },
+  operatorBeta: { username: 'e2e-op-beta', group: 'fleet-operators', fleetId: 'fleet_gql-beta' },
+} as const satisfies Record<string, TestUser>;
 
 /**
  * Puertos fijos POR DEBAJO del rango efímero de Linux (32768–60999): un puerto
@@ -59,7 +76,11 @@ const PORTS: Record<ServiceName, number> = {
   'station-reservation': 24101,
   'billing-wallet': 24102,
   'energy-dispatch': 24103,
+  'graphql-api': 24104,
 };
+
+const dirOf = (name: ServiceName) =>
+  name === 'graphql-api' ? join(ROOT, 'apps', name) : join(ROOT, 'services', name);
 
 export interface Tables {
   readonly sagas: string;
@@ -162,6 +183,7 @@ export class Stack {
   private readonly client: DynamoDBClient;
   private readonly processes = new Map<ServiceName, ChildProcess>();
   private billingProxyUrl = '';
+  private cognitoFixture: CognitoFixture | undefined;
 
   constructor() {
     const suffix = randomUUID().slice(0, 8);
@@ -190,7 +212,8 @@ export class Stack {
       this.createServiceTable('energy-dispatch', this.tables.dispatch),
       this.createFlagsTable(),
     ]);
-    await this.setFlag(false, 1);
+    await this.seedFlags();
+    this.cognitoFixture = await CognitoFixture.create(FLOCI_ENDPOINT, Object.values(E2E_USERS));
     this.billingProxyUrl = await this.proxy.start();
     await Promise.all([
       this.start('station-reservation'),
@@ -198,11 +221,41 @@ export class Stack {
       this.start('energy-dispatch'),
     ]);
     await this.start('saga-orchestrator');
+    await this.start('graphql-api');
+  }
+
+  /** Cognito del stack (pool, client y tokens reales de Floci). */
+  get cognito(): CognitoFixture {
+    if (this.cognitoFixture === undefined) {
+      throw new Error('El stack no está levantado');
+    }
+    return this.cognitoFixture;
+  }
+
+  /** Siembra las flags del catálogo en `false` (valores explícitos de las E2E). */
+  private async seedFlags(): Promise<void> {
+    for (const definition of FEATURE_FLAG_CATALOG) {
+      await this.db.send(
+        new PutCommand({
+          TableName: this.tables.flags,
+          Item: {
+            ...featureFlagKeys.flag(definition.key),
+            key: definition.key,
+            enabled: false,
+            description: definition.description,
+            version: 1,
+            updatedAt: new Date().toISOString(),
+            updatedBy: 'e2e-seed',
+          },
+        }),
+      );
+    }
   }
 
   async down(): Promise<void> {
     await Promise.all([...this.processes.keys()].map((name) => this.stop(name)));
     await this.proxy.stop();
+    await this.cognitoFixture?.delete();
     if (process.env.E2E_KEEP_TABLES !== 'true') {
       await Promise.allSettled(
         (Object.values(this.tables) as string[]).map((TableName) =>
@@ -224,6 +277,8 @@ export class Stack {
           enabled,
           version,
           updatedAt: new Date().toISOString(),
+          description: FEATURE_FLAG_CATALOG.find((d) => d.key === 'SIMULATE_CHARGER_HARDWARE_FAULT')
+            ?.description,
           updatedBy: 'e2e',
         },
       }),
@@ -234,7 +289,7 @@ export class Stack {
   async start(name: ServiceName): Promise<void> {
     const log = createWriteStream(join(EVIDENCE_DIR, 'logs', `${name}.log`), { flags: 'a' });
     const child = spawn(process.execPath, ['src/main.ts'], {
-      cwd: join(ROOT, 'services', name),
+      cwd: dirOf(name),
       env: { ...process.env, ...this.envFor(name) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -318,6 +373,22 @@ export class Stack {
           RECOVERY_INTERVAL_MS: '500',
           SAGA_SYNC_WAIT_MS: '15000',
           HTTP_REQUEST_TIMEOUT_MS: '20000',
+          SHUTDOWN_GRACE_MS: '25000',
+        };
+      case 'graphql-api':
+        return {
+          ...common,
+          FEATURE_FLAGS_TABLE_NAME: this.tables.flags,
+          FEATURE_FLAGS_CACHE_TTL_MS: '0',
+          STATION_RESERVATION_URL: this.url('station-reservation'),
+          BILLING_WALLET_URL: this.url('billing-wallet'),
+          ENERGY_DISPATCH_URL: this.url('energy-dispatch'),
+          SAGA_ORCHESTRATOR_URL: this.url('saga-orchestrator'),
+          // El `iss` de Floci usa el hostname `floci`; el JWKS se lee por localhost.
+          COGNITO_ISSUER: `http://floci:4566/${this.cognito.poolId}`,
+          COGNITO_JWKS_URL: `${FLOCI_ENDPOINT}/${this.cognito.poolId}/.well-known/jwks.json`,
+          COGNITO_CLIENT_ID: this.cognito.clientId,
+          SAGA_START_TIMEOUT_MS: '20000',
           SHUTDOWN_GRACE_MS: '25000',
         };
     }

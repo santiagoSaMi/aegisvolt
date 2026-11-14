@@ -28,10 +28,21 @@ describe('station-reservation v1', () => {
   const api = stationReservationV1;
 
   it('expone versión y rutas', () => {
-    expect(api.API).toEqual({ name: 'station-reservation', version: '1.1.0', basePath: '/v1' });
+    expect(api.API).toEqual({ name: 'station-reservation', version: '1.2.0', basePath: '/v1' });
     expect(api.paths.releaseReservation(ids.reservationId)).toBe(
       `/v1/reservations/${ids.reservationId}/release`,
     );
+  });
+
+  it('1.2.0: el listado de reservas exige la flota y acota la página', () => {
+    expect(api.listReservationsQuerySchema.parse({ fleetId: ids.fleetId })).toEqual({
+      fleetId: ids.fleetId,
+      limit: 20,
+    });
+    expect(api.listReservationsQuerySchema.safeParse({}).success).toBe(false);
+    expect(
+      api.listReservationsQuerySchema.safeParse({ fleetId: ids.fleetId, limit: 500 }).success,
+    ).toBe(false);
   });
 
   it('valida el comando de hold y rechaza campos desconocidos (p. ej. holdSeconds)', () => {

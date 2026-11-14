@@ -16,7 +16,7 @@ import {
   type Principal,
 } from '../../src/application/index.ts';
 import { createFlagUseCases } from '../../src/composition.ts';
-import { loadServiceConfig } from '../../src/config.ts';
+import { loadFlagsConfig } from '../../src/config.ts';
 import { FixedClock } from '../support/in-memory-feature-flag-repository.ts';
 import {
   FLOCI_ENDPOINT,
@@ -230,7 +230,7 @@ describe.skipIf(!flociAvailable)(
 
     it('un despliegue de dev no puede configurarse contra la tabla de prod', () => {
       expect(() =>
-        loadServiceConfig({
+        loadFlagsConfig({
           APP_ENV: 'dev',
           FEATURE_FLAGS_TABLE_NAME: 'aegisvolt-feature-flags-prod',
         }),

@@ -1,5 +1,6 @@
 import {
   City,
+  FleetId,
   ReservationId,
   StationId,
   type ChargingConnector,
@@ -35,6 +36,29 @@ export class GetReservation {
       throw new ReservationNotFoundError(`No existe la reserva ${id}`);
     }
     return { reservation: stored.reservation.value, now: this.clock.now() };
+  }
+}
+
+/** Reservas de una flota (estado efectivo con `now`), la más reciente primero. */
+export class ListFleetReservations {
+  private readonly reservations: ReservationRepository;
+  private readonly clock: Clock;
+
+  constructor(deps: { reservations: ReservationRepository; clock: Clock }) {
+    this.reservations = deps.reservations;
+    this.clock = deps.clock;
+  }
+
+  async execute(query: {
+    fleetId: string;
+    limit: number;
+    cursor?: string | undefined;
+  }): Promise<{ items: readonly Reservation[]; nextCursor?: string; now: Date }> {
+    const page = await this.reservations.listReservationsByFleet(FleetId.parse(query.fleetId), {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    return { ...page, now: this.clock.now() };
   }
 }
 

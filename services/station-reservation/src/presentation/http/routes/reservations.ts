@@ -13,6 +13,7 @@ import type {
   CreateReservation,
   CreateReservationResult,
   GetReservation,
+  ListFleetReservations,
   ReleaseReservation,
 } from '../../../application/index.ts';
 import { sendJson } from '../problem.ts';
@@ -25,6 +26,7 @@ export interface ReservationUseCases {
   readonly confirmReservation: ConfirmReservation;
   readonly releaseReservation: ReleaseReservation;
   readonly getReservation: GetReservation;
+  readonly listFleetReservations: ListFleetReservations;
 }
 
 const reservationParamsSchema = z.object({ reservationId: reservationIdSchema });
@@ -65,6 +67,16 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
     const result = await useCases.createReservation.execute({ reservationId, ...body });
     res.setHeader('location', api.paths.reservation(reservationId));
     sendJson(res, statusFor(result), toReservationView(result.reservation, result.now));
+  });
+
+  /** Reservas de una flota (desde 1.2.0), la más reciente primero. */
+  router.get(ROUTES.reservations, async (req, res) => {
+    const query = parseRequest(api.listReservationsQuerySchema, req.query, 'query');
+    const page = await useCases.listFleetReservations.execute(query);
+    sendJson(res, 200, {
+      items: page.items.map((reservation) => toReservationView(reservation, page.now)),
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+    });
   });
 
   router.get(ROUTES.reservation, async (req, res) => {

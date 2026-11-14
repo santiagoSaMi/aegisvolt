@@ -66,6 +66,8 @@ export interface ReservationItem {
   createdAt: string;
   updatedAt: string;
   version: number;
+  GSI2PK: string;
+  GSI2SK: string;
   expiresAtEpoch?: number;
 }
 
@@ -144,6 +146,8 @@ export function toReservationItem(reservation: Reservation, version: number): Re
     createdAt: reservation.createdAt.toISOString(),
     updatedAt: reservation.updatedAt.toISOString(),
     version,
+    GSI2PK: keys.fleetPartition(reservation.terms.fleetId),
+    GSI2SK: `${reservation.createdAt.toISOString()}#${reservation.id}`,
     ...(terminal ? { expiresAtEpoch: retentionEpoch(reservation.updatedAt) } : {}),
   };
 }

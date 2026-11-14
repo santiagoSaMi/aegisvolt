@@ -12,6 +12,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
 | station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
 | billing-wallet-service | Implementado con libro mayor atómico, reembolsos como operación propia y pruebas de integración en Floci ([README](services/billing-wallet/README.md), [ADR-0022](docs/adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md)) |
+| graphql-api (BFF) | Apollo Server 5 sobre Express: 10 queries y 4 mutaciones, JWT de Cognito, políticas por flota y rol, errores centralizados, llamadas internas con timeouts y reintentos selectivos; flujo completo verificado contra Floci ([guía](docs/graphql/README.md), [ADR-0026](docs/adr/0026-graphql-api-apollo-bff-autenticacion-resiliencia.md)) |
 | Feature flags por ambiente | Tabla por ambiente derivada de `APP_ENV`; `GetFeatureFlags` y `UpdateFeatureFlag` (solo administradores, versión condicional y auditoría) en el graphql-api; los tres servicios leen sin redesplegar ([ADR-0025](docs/adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md), [runbook](docs/runbooks/feature-flags-demo.md)) |
 | saga-orchestrator-service | SAGA `ReserveAndActivateCharging` orquestada, con persistencia antes y después de cada paso, lease, compensaciones verificadas y recuperación; E2E con los cuatro servicios reales en Floci ([README](services/saga-orchestrator/README.md), [ADR-0024](docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md), [runbook](docs/runbooks/saga-demo.md)) |
 | energy-dispatch-service | Implementado con puerto `ChargerAdapter`, cargador simulado, falla inducida por flag desde la tabla de flags del ambiente, telemetría y pruebas de integración en Floci ([README](services/energy-dispatch/README.md), [ADR-0023](docs/adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)) |
@@ -71,7 +72,7 @@ Si modificas un paquete de `packages/*` y lo consume una app en modo `dev`, reco
 | Ruta | Paquete | Puerto | Responsabilidad |
 | --- | --- | --- | --- |
 | `apps/web` | `@aegisvolt/web` | 5173 | SPA React (ADR-0017) |
-| `apps/graphql-api` | `@aegisvolt/graphql-api` | 4000 | BFF GraphQL (hoy: módulo de flags, [README](apps/graphql-api/README.md)) |
+| `apps/graphql-api` | `@aegisvolt/graphql-api` | 4000 | BFF GraphQL ([README](apps/graphql-api/README.md), [guía](docs/graphql/README.md)) |
 | `services/saga-orchestrator` | `@aegisvolt/saga-orchestrator-service` | 4100 | Orquestador de la SAGA (ADR-0002) |
 | `services/station-reservation` | `@aegisvolt/station-reservation-service` | 4101 | Reservas de conectores |
 | `services/billing-wallet` | `@aegisvolt/billing-wallet-service` | 4102 | Billeteras y cobros |
@@ -81,7 +82,7 @@ Si modificas un paquete de `packages/*` y lo consume una app en modo `dev`, reco
 | `packages/config` | `@aegisvolt/config` | — | Configuración validada por entorno |
 | `packages/feature-flags` | `@aegisvolt/feature-flags` | — | Catálogo de flags, tabla por ambiente y lector DynamoDB con caché (ADR-0007, ADR-0025) |
 | `prefect/` | — | — | Flujos de observabilidad (Python, fase posterior) |
-| `tests/e2e/` | `@aegisvolt/e2e-tests` | — | E2E de la SAGA con los cuatro servicios reales contra Floci |
+| `tests/e2e/` | `@aegisvolt/e2e-tests` | — | E2E con los cinco procesos reales y Cognito contra Floci (SAGA y GraphQL) |
 | `infra/` | — | — | Floci local, Terraform y Kubernetes |
 | `scripts/` | — | — | Scripts operativos (Floci, `flags/set.sh` para flags locales) |
 | `.github/workflows/` | — | — | CI/CD (fase posterior) |

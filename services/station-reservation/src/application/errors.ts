@@ -32,6 +32,11 @@ export class StationAlreadyExistsError extends ApplicationError {
  * Otra escritura modificó los datos entre la lectura y la escritura condicional
  * (control de concurrencia optimista). Los casos de uso reintentan releyendo.
  */
+/** Cursor de paginación ilegible o manipulado. */
+export class InvalidCursorError extends ApplicationError {
+  readonly code = 'VALIDATION_ERROR';
+}
+
 export class ConcurrentModificationError extends ApplicationError {
   readonly code = 'CONCURRENT_MODIFICATION';
 }

@@ -3,6 +3,7 @@ import {
   CreateReservation,
   GetAvailableConnectors,
   GetReservation,
+  ListFleetReservations,
   GetStation,
   ListStations,
   RegisterStation,
@@ -66,6 +67,7 @@ export function createTestContext(options: { fastChargeBoost?: boolean } = {}) {
     confirmReservation: new ConfirmReservation({ reservations, clock }),
     releaseReservation: new ReleaseReservation({ reservations, clock }),
     getReservation: new GetReservation({ reservations, clock }),
+    listFleetReservations: new ListFleetReservations({ reservations, clock }),
   };
   return { store, clock, useCases };
 }

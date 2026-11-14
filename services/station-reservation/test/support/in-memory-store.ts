@@ -69,6 +69,15 @@ export class InMemoryStore {
       await tick();
       return this.records.get(reservationId);
     },
+    listReservationsByFleet: async (fleetId, page) => {
+      await tick();
+      const items = [...this.records.values()]
+        .flatMap((stored) => (stored.kind === 'RESERVATION' ? [stored.reservation.value] : []))
+        .filter((reservation) => reservation.terms.fleetId === fleetId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, page.limit);
+      return { items };
+    },
     saveHold: async ({ connector, reservation, displaced, now }) => {
       await tick();
       this.beginWrite();

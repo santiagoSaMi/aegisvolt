@@ -1,6 +1,6 @@
 # station-reservation-service
 
-Microservicio de **disponibilidad y reserva temporal de conectores de carga** (bounded context *Station Reservation*). Tiene persistencia propia en DynamoDB (`aegisvolt-reservations-<env>`) y arquitectura hexagonal. Decisiones: [ADR-0021](../../docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md). Contrato: `stationReservationV1` (1.1.0) en [`packages/contracts`](../../packages/contracts/src/station-reservation/v1.ts), documentado en [docs/contracts](../../docs/contracts/README.md#station-reservation-v1).
+Microservicio de **disponibilidad y reserva temporal de conectores de carga** (bounded context *Station Reservation*). Tiene persistencia propia en DynamoDB (`aegisvolt-reservations-<env>`) y arquitectura hexagonal. Decisiones: [ADR-0021](../../docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md). Contrato: `stationReservationV1` (1.2.0) en [`packages/contracts`](../../packages/contracts/src/station-reservation/v1.ts), documentado en [docs/contracts](../../docs/contracts/README.md#station-reservation-v1).
 
 ## Responsabilidades y endpoints
 
@@ -13,6 +13,7 @@ Microservicio de **disponibilidad y reserva temporal de conectores de carga** (b
 | Confirmar (la carga empezó) | `POST /v1/reservations/{id}/confirm` | `ConfirmReservation` |
 | Liberar una reserva | `POST /v1/reservations/{id}/release` | `ReleaseReservation` |
 | Consultar una reserva | `GET /v1/reservations/{id}` | `GetReservation` |
+| Reservas de una flota (más reciente primero) | `GET /v1/reservations?fleetId=&limit=&cursor=` (GSI2 `FLEET#`, desde 1.2.0) | `ListFleetReservations` |
 | Probes de Kubernetes | `GET /health/live`, `GET /health/ready` | — |
 
 Los comandos de la SAGA llevan `x-correlation-id` y `x-saga-id`. Los errores son `application/problem+json` con el catálogo `ERROR_CODES` del contrato.

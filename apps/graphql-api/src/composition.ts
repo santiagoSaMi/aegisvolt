@@ -1,12 +1,18 @@
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import {
+  CatalogQueries,
+  FleetQueries,
   FlagSnapshotCache,
   GetFeatureFlags,
   ListFeatureFlagChanges,
+  ReleaseReservation,
+  ReserveAndActivateCharging,
+  StopChargingSession,
   UpdateFeatureFlag,
   type Clock,
   type DeploymentEnvironment,
+  type Upstreams,
 } from './application/index.ts';
 import { DynamoDbFeatureFlagRepository } from './infrastructure/dynamodb/dynamodb-feature-flag-repository.ts';
 
@@ -29,5 +35,16 @@ export function createFlagUseCases(deps: {
     getFeatureFlags: new GetFeatureFlags(shared),
     updateFeatureFlag: new UpdateFeatureFlag(shared),
     listFeatureFlagChanges: new ListFeatureFlagChanges({ flags }),
+  };
+}
+
+/** Casos de uso del BFF que delegan en los servicios (sin persistencia propia de negocio). */
+export function createBffUseCases(upstreams: Upstreams) {
+  return {
+    catalog: new CatalogQueries({ upstreams }),
+    fleet: new FleetQueries({ upstreams }),
+    reserveAndActivateCharging: new ReserveAndActivateCharging({ upstreams }),
+    releaseReservation: new ReleaseReservation({ upstreams }),
+    stopChargingSession: new StopChargingSession({ upstreams }),
   };
 }
