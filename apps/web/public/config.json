@@ -1,4 +1,10 @@
 {
   "environment": "local",
-  "graphqlUrl": "./graphql"
+  "graphqlUrl": "./graphql",
+  "auth": {
+    "cognitoUrl": "./auth/cognito",
+    "clientId": "replace-with-user-pool-client-id"
+  },
+  "pollingIntervalMs": 5000,
+  "cities": ["bogota"]
 }

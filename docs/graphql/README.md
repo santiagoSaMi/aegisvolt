@@ -89,6 +89,18 @@ query Saga($sagaId: ID!) {
 
 # Feature flags del ambiente
 query Flags { featureFlags { environment degraded readAt flags { key enabled source version updatedBy } } }
+
+# Consola web: identidad y ambiente (lo informa el backend; el cliente no lo elige)
+query Viewer { viewer { subject groups fleetId isAdmin environment } }
+
+# Monto estimado por billing (tarifa, recargo dinámico y saldo) antes de iniciar la SAGA
+query Estimate { chargingEstimate(stationId: "st_demo-01", connectorId: "cn_01", requestedEnergyKwh: 30) {
+  connectorPowerKw estimated { amountMinor currency } available { amountMinor currency }
+  sufficient tariffMinorPerKwh surgeApplied surgeMultiplierBasisPoints } }
+
+# SAGAs recientes de la flota (filtro opcional por estado) y salud de los servicios
+query Ops { sagas(status: COMPENSATED, first: 20) { sagaId status failureReason correlationId compensationPlan }
+  systemStatus { checkedAt services { service ready latencyMs } } }
 ```
 
 ## 3. Mutaciones

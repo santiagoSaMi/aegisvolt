@@ -27,6 +27,8 @@ const PASSWORD = `E2e-${randomUUID().slice(0, 8)}-Aa1!`;
 export class CognitoFixture {
   readonly poolId: string;
   readonly clientId: string;
+  /** Contraseña ficticia de los usuarios de prueba (para el login desde el navegador). */
+  readonly password: string = PASSWORD;
   private readonly client: CognitoIdentityProviderClient;
 
   private constructor(client: CognitoIdentityProviderClient, poolId: string, clientId: string) {

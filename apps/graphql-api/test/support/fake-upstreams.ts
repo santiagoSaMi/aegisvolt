@@ -215,6 +215,20 @@ export class FakeUpstreams {
           this.record('getWallet', fleetId);
           return Promise.resolve(this.wallets.get(fleetId));
         },
+        checkFunds: (fleetId, query) => {
+          this.record('checkFunds', fleetId, query);
+          return Promise.resolve({
+            fleetId,
+            sufficient: true,
+            required: { amountMinor: 3_750_000, currency: 'COP' },
+            available: { amountMinor: 4_700_000_000, currency: 'COP' },
+            pricing: {
+              tariffMinorPerKwh: 100_000,
+              surgeMultiplierBasisPoints: 12_500,
+              surgeApplied: true,
+            },
+          } as never);
+        },
         listTransactions: (fleetId, request) => {
           this.record('listTransactions', fleetId, request);
           return Promise.resolve({
@@ -274,9 +288,22 @@ export class FakeUpstreams {
           this.record('getSaga', id);
           return Promise.resolve(this.sagas.get(id));
         },
+        listSagas: (fleetId, query) => {
+          this.record('listSagas', fleetId, query);
+          return Promise.resolve([...this.sagas.values()].filter((s) => s.fleetId === fleetId));
+        },
         listSagaEvents: (id) => {
           this.record('listSagaEvents', id);
           return Promise.resolve(this.events);
+        },
+      },
+      health: {
+        check: () => {
+          this.record('healthCheck');
+          return Promise.resolve([
+            { service: 'station-reservation-service', ready: true, latencyMs: 3 },
+            { service: 'billing-wallet-service', ready: false, latencyMs: 1500 },
+          ]);
         },
       },
     };

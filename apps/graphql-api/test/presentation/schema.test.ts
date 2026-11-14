@@ -26,6 +26,10 @@ describe('esquema GraphQL', () => {
         'transactions',
         'sagaStatus',
         'featureFlags',
+        'viewer',
+        'chargingEstimate',
+        'sagas',
+        'systemStatus',
       ].sort(),
     );
     expect(Object.keys(schema.getMutationType()?.getFields() ?? {}).sort()).toEqual(

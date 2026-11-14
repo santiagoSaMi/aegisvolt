@@ -6,18 +6,28 @@ import {
   parseRuntimeConfig,
 } from '../src/config/runtime-config.ts';
 
+const valid = {
+  environment: 'test',
+  graphqlUrl: './graphql',
+  auth: { cognitoUrl: './auth/cognito', clientId: 'client-123' },
+};
+
 describe('parseRuntimeConfig', () => {
-  it('acepta una configuración válida', () => {
-    expect(parseRuntimeConfig({ environment: 'test', graphqlUrl: './graphql' })).toEqual({
-      environment: 'test',
-      graphqlUrl: './graphql',
+  it('acepta una configuración válida y aplica valores por defecto', () => {
+    expect(parseRuntimeConfig(valid)).toEqual({
+      ...valid,
+      pollingIntervalMs: 5000,
+      cities: ['bogota'],
     });
   });
 
   it.each([
     [null, /objeto/],
-    [{ environment: 'staging', graphqlUrl: '/graphql' }, /environment/],
-    [{ environment: 'dev', graphqlUrl: '  ' }, /graphqlUrl/],
+    [{ ...valid, environment: 'staging' }, /environment/],
+    [{ ...valid, graphqlUrl: '  ' }, /graphqlUrl/],
+    [{ ...valid, auth: { cognitoUrl: './auth/cognito' } }, /auth\.clientId/],
+    [{ ...valid, pollingIntervalMs: 100 }, /pollingIntervalMs/],
+    [{ ...valid, cities: ['Bogotá'] }, /cities/],
   ])('rechaza %j', (value, message) => {
     expect(() => parseRuntimeConfig(value)).toThrow(message);
   });
@@ -29,7 +39,7 @@ describe('loadRuntimeConfig', () => {
     const fakeFetch: typeof fetch = (input, init) => {
       const url = input instanceof Request ? input.url : input.toString();
       requested = { url, cache: init?.cache };
-      return Promise.resolve(Response.json({ environment: 'prod', graphqlUrl: './graphql' }));
+      return Promise.resolve(Response.json({ ...valid, environment: 'prod' }));
     };
 
     await expect(loadRuntimeConfig(fakeFetch)).resolves.toMatchObject({ environment: 'prod' });

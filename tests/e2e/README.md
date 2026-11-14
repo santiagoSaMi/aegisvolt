@@ -44,6 +44,21 @@ ls tests/e2e/.evidence/                    # JSON por escenario (summary + ítem
 | Falla inducida por flag | El administrador activa `SIMULATE_CHARGER_HARDWARE_FAULT` por GraphQL → SAGA `COMPENSATED`, débito `REFUNDED`, saldo restituido |
 | Validación | Entradas inválidas → `BAD_USER_INPUT` |
 
+## Consola web en navegador (implementado)
+
+`test/web.e2e.test.ts` (Chromium headless con `playwright-core` 1.62.1; usa el Chromium ya descargado en `~/.cache/ms-playwright`).
+
+- **Montaje.** Compila `apps/web`. `src/web-console.ts` la sirve como el despliegue: estáticos, `config.json` del ambiente y proxies del mismo origen `/graphql` y `/auth/cognito`.
+- **Escenarios:**
+
+| Escenario | Qué se verifica |
+| --- | --- |
+| Credenciales inválidas | Cognito las rechaza y la consola muestra "Usuario o contraseña incorrectos" |
+| Flujo exitoso | Login del operador, ambiente `LOCAL` visible, carga hasta `COMPLETED` y débito en Transacciones |
+| Flujo fallido | El administrador activa `SIMULATE_CHARGER_HARDWARE_FAULT` desde la UI (persistida en DynamoDB, versión 2); el operador no puede editar flags; su carga termina `COMPENSATED`; en Observabilidad se ven el `correlation_id`, el plan `REFUND_DEBIT → RELEASE_RESERVATION` y los eventos; aparece el reembolso |
+
+Capturas en `.evidence/web/`.
+
 ## Pendiente
 
-Flujo completo desde el frontend (SPA), contra un stack `docker compose` en el check `e2e-tests` de CI.
+Ejecutar estas suites contra un stack `docker compose` en el check `e2e-tests` de CI.

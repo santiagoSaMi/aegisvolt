@@ -52,7 +52,7 @@ async function bootstrap(): Promise<void> {
   const app = createHttpApp({
     graphql,
     useCases: {
-      ...createBffUseCases(createUpstreams(config.upstreams)),
+      ...createBffUseCases(createUpstreams(config.upstreams), config.appEnv),
       getFeatureFlags: flags.getFeatureFlags,
       updateFeatureFlag: flags.updateFeatureFlag,
     },

@@ -79,6 +79,21 @@ export const argsSchemas = {
   sessionById: z.object({ sessionId: sessionIdSchema }),
   telemetry: z.object({ last: z.number().int().min(1).max(100).default(10) }),
   sagaStatus: z.object({ sagaId: sagaIdSchema }),
+  chargingEstimate: z.object({
+    fleetId: optionalFleet,
+    stationId: stationIdSchema,
+    connectorId: connectorIdSchema,
+    requestedEnergyKwh: energyKwhSchema,
+  }),
+  sagas: z.object({
+    fleetId: optionalFleet,
+    status: z
+      .string()
+      .optional()
+      .nullable()
+      .transform((v) => v ?? undefined),
+    first,
+  }),
   reserveAndActivateCharging: z.object({
     input: z.object({
       idempotencyKey: idempotencyKeySchema,

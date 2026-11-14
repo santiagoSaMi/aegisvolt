@@ -15,6 +15,7 @@ Plataforma cloud-native para la gestión de carga de flotas de vehículos eléct
 | graphql-api (BFF) | Apollo Server 5 sobre Express: 10 queries y 4 mutaciones, JWT de Cognito, políticas por flota y rol, errores centralizados, llamadas internas con timeouts y reintentos selectivos; flujo completo verificado contra Floci ([guía](docs/graphql/README.md), [ADR-0026](docs/adr/0026-graphql-api-apollo-bff-autenticacion-resiliencia.md)) |
 | Feature flags por ambiente | Tabla por ambiente derivada de `APP_ENV`; `GetFeatureFlags` y `UpdateFeatureFlag` (solo administradores, versión condicional y auditoría) en el graphql-api; los tres servicios leen sin redesplegar ([ADR-0025](docs/adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md), [runbook](docs/runbooks/feature-flags-demo.md)) |
 | saga-orchestrator-service | SAGA `ReserveAndActivateCharging` orquestada, con persistencia antes y después de cada paso, lease, compensaciones verificadas y recuperación; E2E con los cuatro servicios reales en Floci ([README](services/saga-orchestrator/README.md), [ADR-0024](docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md), [runbook](docs/runbooks/saga-demo.md)) |
+| Consola web (`apps/web`) | React 19 + Apollo Client 4: dashboard, estaciones, carga con progreso de la SAGA, transacciones, flags y observabilidad; login con Cognito, ambiente del despliegue y polling configurable; E2E en Chromium real contra Floci ([README](apps/web/README.md), [ADR-0027](docs/adr/0027-consola-web-react-apollo-auth-config-runtime.md), [runbook](docs/runbooks/web-console-demo.md)) |
 | energy-dispatch-service | Implementado con puerto `ChargerAdapter`, cargador simulado, falla inducida por flag desde la tabla de flags del ambiente, telemetría y pruebas de integración en Floci ([README](services/energy-dispatch/README.md), [ADR-0023](docs/adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)) |
 
 ## Requisitos
@@ -56,7 +57,7 @@ pnpm check                    # formato + lint + typecheck + pruebas + build (lo
 ```bash
 pnpm --filter @aegisvolt/billing-wallet-service test
 pnpm --filter @aegisvolt/billing-wallet-service dev         # Node 26 ejecuta src/main.ts directamente (--watch)
-pnpm --filter @aegisvolt/web dev                             # Vite en http://localhost:5173 (proxy /graphql → :4000)
+pnpm --filter @aegisvolt/web dev                             # Vite en http://localhost:5173 (proxy /graphql → :4000, /auth/cognito → Floci)
 pnpm --filter "./services/**" build                          # solo los microservicios
 
 # Paquete desplegable aislado (solo dist + dependencias de producción), base de la imagen Docker
