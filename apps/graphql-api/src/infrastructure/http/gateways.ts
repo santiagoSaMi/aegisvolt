@@ -9,6 +9,8 @@ import {
 import {
   UpstreamRejectedError,
   type BillingWalletGateway,
+  type HealthGateway,
+  type ServiceHealth,
   type EnergyDispatchGateway,
   type PageRequest,
   type SagaOrchestratorGateway,
@@ -135,6 +137,16 @@ export class HttpBillingWalletGateway implements BillingWalletGateway {
       idempotent: true,
     });
   }
+
+  checkFunds(fleetId: string, query: { energyKwh: number; connectorPowerKw: number }) {
+    return this.http.call({
+      method: 'GET',
+      path: billing.paths.fundsCheck(fleetId),
+      query,
+      schema: billing.fundsCheckViewSchema,
+      idempotent: true,
+    });
+  }
 }
 
 export class HttpEnergyDispatchGateway implements EnergyDispatchGateway {
@@ -226,6 +238,17 @@ export class HttpSagaOrchestratorGateway implements SagaOrchestratorGateway {
     );
   }
 
+  async listSagas(fleetId: string, query: { status?: string | undefined; limit: number }) {
+    const result = await this.http.call({
+      method: 'GET',
+      path: orchestrator.paths.sagas(),
+      query: { fleetId, status: query.status, limit: query.limit },
+      schema: orchestrator.listSagasResponseSchema,
+      idempotent: true,
+    });
+    return result.items;
+  }
+
   async listSagaEvents(sagaId: string) {
     const result = await this.http.call({
       method: 'GET',
@@ -234,6 +257,41 @@ export class HttpSagaOrchestratorGateway implements SagaOrchestratorGateway {
       idempotent: true,
     });
     return result.items;
+  }
+}
+
+/**
+ * Readiness de los servicios internos (`GET /health/ready`, timeout corto y en
+ * paralelo). Solo informa disponibilidad; nunca datos de negocio.
+ */
+export class HttpHealthGateway implements HealthGateway {
+  private readonly targets: readonly { service: string; baseUrl: string }[];
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: {
+    targets: readonly { service: string; baseUrl: string }[];
+    timeoutMs: number;
+    fetch?: typeof fetch;
+  }) {
+    this.targets = options.targets;
+    this.timeoutMs = options.timeoutMs;
+    this.fetchImpl = options.fetch ?? fetch;
+  }
+
+  check(): Promise<readonly ServiceHealth[]> {
+    return Promise.all(
+      this.targets.map(async ({ service, baseUrl }) => {
+        const started = performance.now();
+        const ready = await this.fetchImpl(new URL('/health/ready', baseUrl), {
+          signal: AbortSignal.timeout(this.timeoutMs),
+        }).then(
+          (response) => response.ok,
+          () => false,
+        );
+        return { service, ready, latencyMs: Math.round(performance.now() - started) };
+      }),
+    );
   }
 }
 
@@ -271,5 +329,15 @@ export function createUpstreams(config: UpstreamsConfig): Upstreams {
       client('saga-orchestrator-service', config.sagaOrchestratorUrl),
       { startTimeoutMs: config.sagaStartTimeoutMs },
     ),
+    health: new HttpHealthGateway({
+      targets: [
+        { service: 'station-reservation-service', baseUrl: config.stationReservationUrl },
+        { service: 'billing-wallet-service', baseUrl: config.billingWalletUrl },
+        { service: 'energy-dispatch-service', baseUrl: config.energyDispatchUrl },
+        { service: 'saga-orchestrator-service', baseUrl: config.sagaOrchestratorUrl },
+      ],
+      timeoutMs: Math.min(config.timeoutMs, 1_500),
+      ...(config.fetch === undefined ? {} : { fetch: config.fetch }),
+    }),
   };
 }

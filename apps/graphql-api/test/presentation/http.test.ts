@@ -65,7 +65,7 @@ beforeEach(async () => {
   const app = createHttpApp({
     graphql,
     useCases: {
-      ...createBffUseCases(new FakeUpstreams().build()),
+      ...createBffUseCases(new FakeUpstreams().build(), 'dev'),
       getFeatureFlags: new GetFeatureFlags(deps),
       updateFeatureFlag: new UpdateFeatureFlag(deps),
     },

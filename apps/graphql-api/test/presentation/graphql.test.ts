@@ -63,7 +63,7 @@ beforeEach(() => {
     environment: 'dev' as const,
   };
   contextUseCases = {
-    ...createBffUseCases(upstreams.build()),
+    ...createBffUseCases(upstreams.build(), 'dev'),
     getFeatureFlags: new GetFeatureFlags(deps),
     updateFeatureFlag: new UpdateFeatureFlag(deps),
   };
@@ -177,6 +177,66 @@ describe('Queries', () => {
     });
     const withEnv = await run(`{ featureFlags(environment: "prod") { environment } }`);
     expect(codeOf(withEnv)).toBe('GRAPHQL_VALIDATION_FAILED');
+  });
+});
+
+describe('Consultas de la consola', () => {
+  it('viewer: flota, rol y ambiente del despliegue', async () => {
+    const result = await run(`{ viewer { subject fleetId isAdmin groups environment } }`);
+    expect(result.data).toEqual({
+      viewer: {
+        subject: 'op-sub',
+        fleetId: FLEET,
+        isAdmin: false,
+        groups: ['fleet-operators'],
+        environment: 'dev',
+      },
+    });
+  });
+
+  it('chargingEstimate usa la potencia del conector real y el cálculo de billing', async () => {
+    const result =
+      await run(`{ chargingEstimate(stationId: "${STATION}", connectorId: "cn_01", requestedEnergyKwh: 30) {
+      fleetId connectorPowerKw estimated { amountMinor currency } sufficient surgeApplied surgeMultiplierBasisPoints } }`);
+
+    expect(result.data).toEqual({
+      chargingEstimate: {
+        fleetId: FLEET,
+        connectorPowerKw: 60,
+        estimated: { amountMinor: 3_750_000, currency: 'COP' },
+        sufficient: true,
+        surgeApplied: true,
+        surgeMultiplierBasisPoints: 12_500,
+      },
+    });
+    expect(upstreams.callsTo('checkFunds')[0]?.args).toEqual([
+      FLEET,
+      { energyKwh: 30, connectorPowerKw: 60 },
+    ]);
+    const missing = await run(
+      `{ chargingEstimate(stationId: "${STATION}", connectorId: "cn_99", requestedEnergyKwh: 30) { sufficient } }`,
+    );
+    expect(codeOf(missing)).toBe('NOT_FOUND');
+  });
+
+  it('sagas de la flota y systemStatus con la readiness de cada servicio', async () => {
+    const result = await run(`{ sagas(first: 5) { sagaId status }
+      systemStatus { environment services { service ready latencyMs } } }`);
+
+    expect(result.data).toMatchObject({
+      sagas: [{ sagaId: SAGA, status: 'COMPLETED' }],
+      systemStatus: {
+        environment: 'dev',
+        services: [
+          { service: 'station-reservation-service', ready: true },
+          { service: 'billing-wallet-service', ready: false },
+        ],
+      },
+    });
+    expect(upstreams.callsTo('listSagas')[0]?.args).toEqual([
+      FLEET,
+      { status: undefined, limit: 5 },
+    ]);
   });
 });
 

@@ -24,6 +24,14 @@ export type SessionView = energyDispatchV1.SessionView;
 export type TelemetryRecordView = energyDispatchV1.TelemetryRecordView;
 export type SagaView = sagaOrchestratorV1.SagaView;
 export type SagaEventView = sagaOrchestratorV1.SagaEventView;
+export type FundsCheckView = billingWalletV1.FundsCheckView;
+
+/** Readiness de un servicio (para el estado del sistema). */
+export interface ServiceHealth {
+  readonly service: string;
+  readonly ready: boolean;
+  readonly latencyMs: number;
+}
 
 export interface Page<T> {
   readonly items: readonly T[];
@@ -54,6 +62,11 @@ export interface StationReservationGateway {
 export interface BillingWalletGateway {
   getWallet(fleetId: string): Promise<WalletView | undefined>;
   listTransactions(fleetId: string, page: PageRequest): Promise<Page<WalletTransactionView>>;
+  /** Importe estimado de una carga (lo calcula billing con su política de precios y flags). */
+  checkFunds(
+    fleetId: string,
+    query: { energyKwh: number; connectorPowerKw: number },
+  ): Promise<FundsCheckView>;
 }
 
 export interface EnergyDispatchGateway {
@@ -87,7 +100,16 @@ export interface SagaOrchestratorGateway {
     idempotencyKey: string,
   ): Promise<{ saga: SagaView; finished: boolean }>;
   getSaga(sagaId: string): Promise<SagaView | undefined>;
+  listSagas(
+    fleetId: string,
+    query: { status?: string | undefined; limit: number },
+  ): Promise<readonly SagaView[]>;
   listSagaEvents(sagaId: string): Promise<readonly SagaEventView[]>;
+}
+
+/** Readiness de los servicios internos (sin datos de negocio). */
+export interface HealthGateway {
+  check(): Promise<readonly ServiceHealth[]>;
 }
 
 export interface Upstreams {
@@ -95,4 +117,5 @@ export interface Upstreams {
   readonly billing: BillingWalletGateway;
   readonly dispatch: EnergyDispatchGateway;
   readonly orchestrator: SagaOrchestratorGateway;
+  readonly health: HealthGateway;
 }

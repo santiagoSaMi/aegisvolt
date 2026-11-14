@@ -358,6 +358,52 @@ export const typeDefs = /* GraphQL */ `
     environment: Environment!
   }
 
+  # --- Consola (identidad, estimación, estado del sistema) ----------------------
+
+  "Identidad de quien usa la consola (claims verificados del token)."
+  type Viewer {
+    subject: String!
+    groups: [String!]!
+    "Flota del operador (custom:fleet_id); null para administradores."
+    fleetId: ID
+    isAdmin: Boolean!
+    "Ambiente del despliegue que responde (APP_ENV); el cliente no puede elegirlo."
+    environment: Environment!
+  }
+
+  "Estimación previa de una carga, calculada por billing (tarifa, surge y flags)."
+  type ChargingEstimate {
+    fleetId: ID!
+    "Potencia del conector elegido (kW)."
+    connectorPowerKw: Float!
+    requestedEnergyKwh: Float!
+    "Importe que se cobraría ahora."
+    estimated: Money!
+    "Saldo disponible de la billetera."
+    available: Money!
+    "true si el saldo alcanza."
+    sufficient: Boolean!
+    tariffMinorPerKwh: SafeInt!
+    "true si se aplica el recargo de hora pico (flag ENABLE_DYNAMIC_SURGE_PRICING)."
+    surgeApplied: Boolean!
+    "Multiplicador en puntos básicos (10000 = 1×)."
+    surgeMultiplierBasisPoints: Int!
+  }
+
+  "Disponibilidad (readiness) de un servicio interno."
+  type ServiceStatus {
+    service: String!
+    ready: Boolean!
+    latencyMs: Int!
+  }
+
+  "Estado del sistema visto desde el graphql-api."
+  type SystemStatus {
+    environment: Environment!
+    services: [ServiceStatus!]!
+    checkedAt: DateTime!
+  }
+
   # --- Consultas -----------------------------------------------------------------
 
   type Query {
@@ -386,6 +432,19 @@ export const typeDefs = /* GraphQL */ `
     sagaStatus(sagaId: ID!): Saga
     "Feature flags del ambiente del despliegue."
     featureFlags: FeatureFlags!
+    "Identidad de quien llama: flota, rol y ambiente."
+    viewer: Viewer!
+    "Importe estimado de una carga (lo calcula billing). Operadores: su flota; administradores: fleetId."
+    chargingEstimate(
+      fleetId: ID
+      stationId: ID!
+      connectorId: ID!
+      requestedEnergyKwh: Float!
+    ): ChargingEstimate!
+    "SAGAs de la flota, la más reciente primero (historial, errores y compensaciones)."
+    sagas(fleetId: ID, status: SagaStatus, first: Int = 20): [Saga!]!
+    "Readiness de los servicios internos."
+    systemStatus: SystemStatus!
   }
 
   # --- Mutaciones ----------------------------------------------------------------

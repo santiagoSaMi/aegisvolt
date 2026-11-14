@@ -2,6 +2,10 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import {
   CatalogQueries,
+  EstimateCharging,
+  GetSystemStatus,
+  GetViewer,
+  ListFleetSagas,
   FleetQueries,
   FlagSnapshotCache,
   GetFeatureFlags,
@@ -39,8 +43,12 @@ export function createFlagUseCases(deps: {
 }
 
 /** Casos de uso del BFF que delegan en los servicios (sin persistencia propia de negocio). */
-export function createBffUseCases(upstreams: Upstreams) {
+export function createBffUseCases(upstreams: Upstreams, environment: DeploymentEnvironment) {
   return {
+    viewer: new GetViewer({ environment }),
+    estimateCharging: new EstimateCharging({ upstreams }),
+    listFleetSagas: new ListFleetSagas({ upstreams }),
+    systemStatus: new GetSystemStatus({ upstreams }),
     catalog: new CatalogQueries({ upstreams }),
     fleet: new FleetQueries({ upstreams }),
     reserveAndActivateCharging: new ReserveAndActivateCharging({ upstreams }),

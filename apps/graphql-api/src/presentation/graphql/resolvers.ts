@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   CatalogQueries,
+  EstimateCharging,
+  GetSystemStatus,
+  GetViewer,
+  ListFleetSagas,
   FeatureFlagsSnapshot,
   FleetQueries,
   GetFeatureFlags,
@@ -20,6 +24,10 @@ import { argsSchemas, parseArgs } from './validation.ts';
 
 /** Casos de uso que necesita la capa GraphQL (inyectados desde la composición). */
 export interface GraphqlUseCases {
+  readonly viewer: GetViewer;
+  readonly estimateCharging: EstimateCharging;
+  readonly listFleetSagas: ListFleetSagas;
+  readonly systemStatus: GetSystemStatus;
   readonly catalog: CatalogQueries;
   readonly fleet: FleetQueries;
   readonly reserveAndActivateCharging: ReserveAndActivateCharging;
@@ -116,6 +124,32 @@ export const resolvers = {
     },
     featureFlags: async (_: unknown, __: unknown, ctx: GraphqlContext) =>
       flagsView(await ctx.useCases.getFeatureFlags.execute(ctx.principal)),
+    viewer: (_: unknown, __: unknown, ctx: GraphqlContext) =>
+      ctx.useCases.viewer.execute(ctx.principal),
+    chargingEstimate: async (_: unknown, args: unknown, ctx: GraphqlContext) => {
+      const input = parseArgs(argsSchemas.chargingEstimate, args);
+      const estimate = await ctx.useCases.estimateCharging.execute(ctx.principal, input);
+      return {
+        fleetId: estimate.fleetId,
+        connectorPowerKw: estimate.connectorPowerKw,
+        requestedEnergyKwh: estimate.requestedEnergyKwh,
+        estimated: estimate.check.required,
+        available: estimate.check.available,
+        sufficient: estimate.check.sufficient,
+        tariffMinorPerKwh: estimate.check.pricing.tariffMinorPerKwh,
+        surgeApplied: estimate.check.pricing.surgeApplied,
+        surgeMultiplierBasisPoints: estimate.check.pricing.surgeMultiplierBasisPoints,
+      };
+    },
+    sagas: (_: unknown, args: unknown, ctx: GraphqlContext) => {
+      const { fleetId, status, first } = parseArgs(argsSchemas.sagas, args);
+      return ctx.useCases.listFleetSagas.execute(ctx.principal, { fleetId, status, limit: first });
+    },
+    systemStatus: async (_: unknown, __: unknown, ctx: GraphqlContext) => {
+      const services = await ctx.useCases.systemStatus.execute(ctx.principal);
+      const viewer = ctx.useCases.viewer.execute(ctx.principal);
+      return { environment: viewer.environment, services, checkedAt: new Date() };
+    },
   },
 
   Mutation: {

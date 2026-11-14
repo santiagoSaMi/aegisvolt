@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { App } from './App.tsx';
+import { App } from './app/App.tsx';
 import { loadRuntimeConfig } from './config/runtime-config.ts';
 import './styles.css';
 
@@ -11,6 +11,7 @@ if (container === null) {
 }
 const root = createRoot(container);
 
+// La configuración del ambiente la sirve el despliegue (config.json), no el bundle.
 loadRuntimeConfig().then(
   (config) => {
     root.render(
@@ -21,9 +22,10 @@ loadRuntimeConfig().then(
   },
   (error: unknown) => {
     root.render(
-      <p role="alert">
-        Error de configuración: {error instanceof Error ? error.message : String(error)}
-      </p>,
+      <main className="fatal" role="alert">
+        <h1>No se pudo iniciar la consola</h1>
+        <p>Error de configuración: {error instanceof Error ? error.message : String(error)}</p>
+      </main>,
     );
   },
 );
