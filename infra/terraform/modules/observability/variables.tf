@@ -17,6 +17,8 @@ variable "services" {
     "energy-dispatch-service",
     "saga-orchestrator-service",
     "graphql-api",
+    # Consola (nginx): logs de acceso en JSON con el mismo esquema (ADR-0028, ADR-0031).
+    "web",
   ]
 }
 

@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: station-reservation-service
+  annotations:
+    aegisvolt.io/runtime: node
+  labels:
+    app.kubernetes.io/name: station-reservation-service
+    app.kubernetes.io/part-of: aegisvolt
+    app.kubernetes.io/component: service
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: station-reservation-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: station-reservation-service
+        app.kubernetes.io/part-of: aegisvolt
+        app.kubernetes.io/component: service
+    spec:
+      serviceAccountName: station-reservation-service
+      automountServiceAccountToken: false
+      # Mayor que la ventana de apagado de la app + preStop.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: station-reservation-service
+          # Lo reemplaza el overlay/despliegue por <registro>/aegisvolt/station-reservation:sha-<commit>.
+          image: aegisvolt/station-reservation
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: station-reservation-service-config
+          env:
+            # Límite de heap acorde al límite de memoria del contenedor.
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=192
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          lifecycle:
+            # Deja de recibir tráfico (endpoints actualizados) antes de que llegue SIGTERM.
+            preStop:
+              sleep:
+                seconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

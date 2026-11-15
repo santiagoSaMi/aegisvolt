@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-api
+  labels:
+    app.kubernetes.io/name: graphql-api
+    app.kubernetes.io/part-of: aegisvolt
+    app.kubernetes.io/component: bff
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: graphql-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

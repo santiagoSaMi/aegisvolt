@@ -1,0 +1,16 @@
+# Contexto mínimo de services/saga-orchestrator/Dockerfile (lista blanca).
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!tsconfig.node.json
+!packages/
+!services/saga-orchestrator/
+**/node_modules
+**/dist
+**/coverage
+**/test
+**/.env
+**/.env.*
+**/*.tsbuildinfo

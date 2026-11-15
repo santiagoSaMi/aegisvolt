@@ -119,7 +119,7 @@ describe('Carga: reservar y activar (integración con GraphQL simulado)', () => 
     });
     expect(sent[0]?.idempotencyKey).toEqual(expect.any(String));
     expect(sent[0]).not.toHaveProperty('fleetId'); // el backend usa la flota del token
-  });
+  }, 15_000); // espera el polling real (hasta 4 s): margen frente a máquinas cargadas
 
   it('flujo fallido: falla del cargador → SAGA compensada (reembolso y liberación)', async () => {
     renderPage(<ChargingPage />, {

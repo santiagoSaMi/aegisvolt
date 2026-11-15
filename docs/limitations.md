@@ -40,7 +40,23 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
   - No se pueden actualizar la configuración ni la versión del clúster.
   - `test/test` es rechazado; hace falta una access key IAM emitida por Floci.
   - `endpointPrivateAccess=true` / `endpointPublicAccess=false` se almacenan, pero **no se aplican**: `kubectl` sigue accediendo desde el host.
-- **Propuesta:** aprovisionar el clúster con `aws_eks_cluster` en Terraform contra Floci y desplegar con `kubectl`/manifiestos sobre ese k3s. Pendiente de validar en la fase de IaC: soporte de `aws_eks_cluster`/`aws_eks_node_group` del provider contra Floci.
+- **Operación verificada** (2026-11-15, k3s v1.36.0+k3s1, [ADR-0031](adr/0031-contenedores-kubernetes-floci.md)):
+  - pull de imágenes desde el ECR de Floci;
+  - Deployments con rollouts, probes y DNS de Services;
+  - **NetworkPolicies aplicadas** (kube-router de k3s): conexiones permitidas y bloqueadas;
+  - Pod Security Admission `restricted`;
+  - `exec`, `port-forward` y `logs`;
+  - una SAGA real de punta a punta;
+  - Fluent Bit → CloudWatch;
+  - dry-run del lado del servidor de los overlays `test` y `prod`.
+- **Lo que NO equivale a EKS administrado:**
+  - un solo nodo y sin node groups reales;
+  - sin balanceador de Services (`LoadBalancer`), así que la entrada local es `port-forward`;
+  - IRSA y Pod Identity sin verificar: los pods usan credenciales ficticias por Secret;
+  - las NetworkPolicies las aplica kube-router (en EKS: el *network policy agent* de VPC CNI o Calico);
+  - sin actualizaciones gestionadas del plano de control.
+  - Las pruebas de carga o de alta disponibilidad no son representativas.
+- **Propuesta:** aprovisionar el clúster con `aws_eks_cluster` en Terraform contra Floci (fase de IaC; hoy lo crea `scripts/floci/k8s-deploy.sh` con AWS CLI). Pendiente de validar: soporte de `aws_eks_cluster`/`aws_eks_node_group` del provider contra Floci.
 
 ## L-04 · Canary con métricas de CloudWatch
 

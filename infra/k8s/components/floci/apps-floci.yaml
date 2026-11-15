@@ -1,0 +1,57 @@
+# Acceso de las apps a Floci (solo local). Mismo patrón que service-floci.yaml:
+# Service sin selector + EndpointSlice a la IP de Floci (placeholder FLOCI_IP).
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci
+  namespace: aegisvolt
+spec:
+  ports:
+    - name: aws
+      port: 4566
+      targetPort: 4566
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: floci
+  namespace: aegisvolt
+  labels:
+    kubernetes.io/service-name: floci
+addressType: IPv4
+ports:
+  - name: aws
+    port: 4566
+endpoints:
+  - addresses:
+      - FLOCI_IP
+---
+# Endpoint de AWS para los SDK (HTTP; Floci también sirve HTTPS en el mismo puerto).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: floci-endpoint
+  namespace: aegisvolt
+data:
+  AWS_ENDPOINT_URL: http://floci:4566
+---
+# Las NetworkPolicy evalúan la IP de destino tras el DNAT del Service: se permite
+# la IP de Floci en el puerto 4566 (en AWS real, allow-aws-egress → 443).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-floci-egress
+  namespace: aegisvolt
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: aegisvolt
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: FLOCI_IP/32
+      ports:
+        - port: 4566
+          protocol: TCP

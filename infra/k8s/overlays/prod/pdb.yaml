@@ -1,0 +1,66 @@
+# prod: al menos una réplica disponible durante drenajes de nodo.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: station-reservation-service
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: station-reservation-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: billing-wallet-service
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing-wallet-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: energy-dispatch-service
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: energy-dispatch-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: saga-orchestrator-service
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: saga-orchestrator-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graphql-api
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: graphql-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+  namespace: aegisvolt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web

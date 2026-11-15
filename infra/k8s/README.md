@@ -1,14 +1,24 @@
 # Kubernetes
 
-Manifiestos Kustomize ([ADR-0012](../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md), [ADR-0013](../../docs/adr/0013-canary-argo-rollouts-analisis-cloudwatch.md)):
+Manifiestos Kustomize ([ADR-0012](../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md), [ADR-0031](../../docs/adr/0031-contenedores-kubernetes-floci.md)). Despliegue, inspección y troubleshooting: [runbook](../../docs/runbooks/k8s-floci.md).
 
-| Directorio | Contenido | Estado |
-| --- | --- | --- |
-| `base/logging/` | Fluent Bit 5.1.5 (DaemonSet, RBAC de solo lectura, configuración) → CloudWatch Logs `/aegisvolt/<env>/<servicio>` ([ADR-0029](../../docs/adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)) | Implementado |
-| `components/floci/` | Solo local: Service `floci` sin selector + EndpointSlice, salida de Fluent Bit por HTTPS a Floci (CA local), Secret con credenciales ficticias | Implementado (logging) |
-| `overlays/dev`, `overlays/test`, `overlays/prod` | Ambiente del clúster (`AEGISVOLT_ENV`) | Solo logging por ahora |
-| `base/<app>` | Rollouts, Services, NetworkPolicies y PDB por aplicación | Fase de Kubernetes (con los Dockerfiles) |
+| Directorio | Contenido |
+| --- | --- |
+| `base/namespace/` | Namespace `aegisvolt` (Pod Security Admission `restricted`) y políticas comunes: `default-deny-all`, `allow-dns-egress`, `allow-aws-egress` |
+| `base/apps/<app>/` | Por unidad: Deployment (probes, recursos, security context, preStop), Service `ClusterIP` 80→8080, ServiceAccount sin token, NetworkPolicy y `config.env` (ConfigMap no sensible) |
+| `base/logging/` | Fluent Bit 5.1.5 → CloudWatch `/aegisvolt/<env>/<servicio>` ([ADR-0029](../../docs/adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)) |
+| `components/floci/` | Solo local: Service `floci` + EndpointSlice (IP inyectada al desplegar), `AWS_ENDPOINT_URL`, Secret de credenciales **ficticias**, `allow-floci-egress`, salida de Fluent Bit por HTTPS a Floci |
+| `overlays/dev`, `overlays/test`, `overlays/prod` | `APP_ENV`, tablas `aegisvolt-<dominio>-<env>`, nivel de log y ambiente del colector. `prod`: 2 réplicas, más CPU y PodDisruptionBudgets |
 
-Para que sus logs se recojan, cada workload de AegisVolt debe llevar las etiquetas `app.kubernetes.io/part-of: aegisvolt` y `app.kubernetes.io/name: <service_name>`. El nombre debe ser el mismo `service_name` que usan los logs y el log group.
+Unidades: `station-reservation-service`, `billing-wallet-service`, `energy-dispatch-service`, `saga-orchestrator-service`, `graphql-api` y `web`.
 
-Despliegue y verificación local: `scripts/floci/logging-k8s-verify.sh --env dev`. El script crea un clúster EKS temporal en Floci, sustituye la IP de Floci (placeholder `FLOCI_IP`) y crea el ConfigMap `floci-ca` desde `infra/local/floci/data/tls/`. Requiere `scripts/floci/terraform-live.sh dev apply`.
+- **Imágenes:** no se fijan en Git. `scripts/floci/k8s-deploy.sh` genera una kustomization con `images` (ECR de Floci, `sha-<commit>`) sobre el overlay.
+- **Identidad del ambiente:** el ConfigMap `aegisvolt-identity` (emisor, JWKS y app client de Cognito) lo publica el despliegue; en AWS real, Terraform.
+- **Etiquetas obligatorias de cada workload:** `app.kubernetes.io/part-of: aegisvolt` y `app.kubernetes.io/name: <service_name>`, de las que dependen los log groups y las NetworkPolicies.
+- **Deployments:** el canary con Argo Rollouts (ADR-0013) llega con CI/CD.
+
+```bash
+kubectl kustomize infra/k8s/overlays/dev       # renderizar
+scripts/floci/k8s-deploy.sh dev                # desplegar en el EKS (k3s) de Floci
+scripts/floci/k8s-verify.sh dev                # verificar operación
+```

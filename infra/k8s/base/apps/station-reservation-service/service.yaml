@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: station-reservation-service
+  labels:
+    app.kubernetes.io/name: station-reservation-service
+    app.kubernetes.io/part-of: aegisvolt
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: station-reservation-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
