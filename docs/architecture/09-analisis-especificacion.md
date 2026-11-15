@@ -42,7 +42,7 @@ Estados:
 | --- | --- | --- | --- | --- | --- |
 | P-16 | §3.3 canary 10–20 % + "métricas de error en CloudWatch" | Sin *traffic router*, el porcentaje es por réplicas: con 2 réplicas el canary es del 50 %. Floci no soporta *metric math* ni `stats` en Insights. | Problema técnico | Argo Rollouts por réplicas: 5 réplicas en `prod` (20 % exacto), 2 en `dev` (50 %, documentado). La tasa de error se calcula en un Job de análisis a partir de CloudWatch Logs. | Resuelto ([ADR-0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md)) |
 | P-18 | §2.4 "uso exclusivo de DynamoDB" frente a §2.5 Prefect | Prefect Server necesita su propia base de metadatos. | Contradicción aparente | "Exclusivo" se interpreta como datos de negocio de AegisVolt. La BD interna de Prefect es infraestructura de la herramienta. | Resuelto ([ADR-0014](../adr/0014-observabilidad-cloudwatch-fluent-bit-prefect.md)) |
-| P-19 | §2.5 Prefect "audite … en DynamoDB" frente a Database-per-Service | Prefect lee las tablas de todos los servicios. | Tensión de diseño | Excepción explícita de **solo lectura** para auditoría (rol IAM de lectura); Prefect nunca escribe ni repara. | Resuelto (ADR-0014) |
+| P-19 | §2.5 Prefect "audite … en DynamoDB" frente a Database-per-Service | Prefect lee las tablas de todos los servicios. | Tensión de diseño | ~~Excepción de solo lectura sobre las tablas~~. Revisado: Prefect audita **por las APIs** de cada servicio, sin leer tablas ajenas; los datos siguen viniendo de DynamoDB a través de su dueño. | Revisado ([ADR-0030](../adr/0030-prefect-auditoria-solo-lectura-por-apis.md)) |
 
 ## Git y CI/CD
 

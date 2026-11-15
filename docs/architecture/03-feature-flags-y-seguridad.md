@@ -76,7 +76,7 @@ En AWS real se recomendaría además una cuenta por ambiente (AWS Organizations)
 Verificado en Floci 2.4.0:
 - `initiate-auth` emite un JWT con `cognito:groups` y `custom:fleet_id`.
 - El JWKS se publica en `http://<host>:4566/<poolId>/.well-known/jwks.json`.
-- El `iss` usa el hostname `floci` (`http://floci:4566/<poolId>`), que los pods resolverán mediante el Service `floci` ([ADR-0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md)).
+- El `iss` usa el hostname `floci` (`https://floci:4566/<poolId>` desde que Floci corre con TLS, [ADR-0029](../adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)), que los pods resolverán mediante el Service `floci` ([ADR-0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md)).
 - **No verificado:** que API Gateway en Floci aplique un *Cognito authorizer*. Por eso la verificación en el GraphQL API es obligatoria y no opcional.
 
 ### Seguridad entre servicios

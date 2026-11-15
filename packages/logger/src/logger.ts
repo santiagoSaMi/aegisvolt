@@ -1,5 +1,6 @@
 import { pino, type DestinationStream, type Logger as PinoLogger } from 'pino';
 
+import { toLoggedError } from './error.ts';
 import { getLogContext } from './log-context.ts';
 
 export type LoggerLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
@@ -31,28 +32,44 @@ export interface CreateLoggerOptions {
   readonly destination?: LogDestination;
 }
 
-/** Rutas cuyo valor nunca debe llegar a los logs. */
-const REDACTED_PATHS = [
+/**
+ * Claves cuyo valor nunca debe llegar a los logs: secretos, credenciales,
+ * tokens y datos personales que la plataforma no necesita registrar (ADR-0028).
+ * Se ocultan en el primer y segundo nivel de los campos.
+ */
+const SENSITIVE_KEYS = [
   'password',
   'token',
   'accessToken',
   'idToken',
   'refreshToken',
   'secret',
+  'clientSecret',
   'secretAccessKey',
+  'accessKeyId',
+  'sessionToken',
+  'credentials',
   'authorization',
-  'headers.authorization',
-  'headers.cookie',
-  '*.password',
-  '*.token',
-  '*.secret',
-  '*.secretAccessKey',
-  '*.authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'apiKey',
+  'AuthParameters',
+  'email',
+  'phone',
+  'phoneNumber',
 ];
 
+const REDACTED_PATHS = SENSITIVE_KEYS.flatMap((key) => {
+  const path = /^[A-Za-z_$][\w$]*$/.test(key) ? key : `["${key}"]`;
+  const nested = path.startsWith('[') ? `*${path}` : `*.${path}`;
+  return [path, nested];
+});
+
 /**
- * Crea un logger JSON (una línea por evento) con los campos obligatorios de
- * CLAUDE.md: timestamp, level, service, environment, correlation_id y message.
+ * Crea un logger JSON (una línea por evento) con los campos de ADR-0028:
+ * `timestamp`, `level`, `environment`, `service_name`, `correlation_id`,
+ * `saga_id` (cuando aplica), `operation`, `message` y `error` tipado.
  */
 export function createLogger(options: CreateLoggerOptions): Logger {
   const instance = pino(
@@ -60,7 +77,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       level: options.level ?? 'info',
       messageKey: 'message',
       base: {
-        service: options.service,
+        service_name: options.service,
         environment: options.environment,
         version: options.version,
       },
@@ -73,8 +90,11 @@ export function createLogger(options: CreateLoggerOptions): Logger {
         return {
           correlation_id: context?.correlationId ?? null,
           ...(context?.sagaId === undefined ? {} : { saga_id: context.sagaId }),
+          operation: context?.operation ?? null,
         };
       },
+      // Cualquier campo `error` (Error, string u objeto) se registra con forma estable.
+      serializers: { error: toLoggedError },
       redact: { paths: REDACTED_PATHS, censor: '[REDACTED]' },
     },
     options.destination ?? pino.destination({ dest: 1, sync: false }),

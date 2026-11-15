@@ -56,12 +56,17 @@ function bootstrap(): void {
     // Express 5 entrega aquí los errores de `listen` (p. ej. EADDRINUSE): sin
     // esta comprobación el proceso terminaría con código 0 sin servir nada.
     if (error) {
-      logger.fatal('No se pudo abrir el puerto HTTP', { port: config.port, error: error.message });
+      logger.fatal('No se pudo abrir el puerto HTTP', {
+        operation: 'Startup',
+        port: config.port,
+        error,
+      });
       process.exitCode = 1;
       client.destroy();
       return;
     }
     logger.info('Servicio iniciado', {
+      operation: 'Startup',
       port: config.port,
       table: config.dynamodb.tableName,
       flags_table: config.featureFlags.tableName,
@@ -97,6 +102,6 @@ try {
     service: SERVICE_NAME,
     environment: process.env.APP_ENV ?? 'unknown',
     version: process.env.SERVICE_VERSION ?? 'unknown',
-  }).fatal('Arranque fallido', { error: error instanceof Error ? error.message : String(error) });
+  }).fatal('Arranque fallido', { operation: 'Startup', error });
   process.exitCode = 1;
 }

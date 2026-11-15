@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { energyDispatchV1 } from '@aegisvolt/contracts';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GetChargingSession } from '../../src/application/index.ts';
 import { SimulatedChargerAdapter } from '../../src/infrastructure/charger/simulated-charger-adapter.ts';
@@ -347,5 +347,59 @@ describe('Errores comunes y probes', () => {
     server?.close();
     url = await start({ readinessCheck: () => Promise.resolve(false) });
     expect((await fetch(`${url}/health/ready`)).status).toBe(503);
+  });
+});
+
+describe('logs estructurados (ADR-0028)', () => {
+  it('cada línea lleva los campos obligatorios, la operación y el correlation_id recibido; los rechazos, un error tipado', async () => {
+    const { logger, lines } = capturingLogger();
+    server?.close();
+    url = await start({ logger });
+
+    const response = await fetch(`${url}/v1/sessions/ses_00000000-0000-4000-8000-0000000000ff`, {
+      headers: { 'x-correlation-id': CORRELATION_ID, authorization: 'Bearer secreto-123' },
+    });
+    expect(response.status).toBe(404);
+    expect(response.headers.get('x-correlation-id')).toBe(CORRELATION_ID);
+
+    // Ruta inexistente: sin operación nombrada → MÉTODO /ruta.
+    await fetch(`${url}/v1/no-existe`, { headers: { 'x-correlation-id': CORRELATION_ID } });
+    await vi.waitFor(() => {
+      expect(lines.filter((line) => line.event === 'http_request')).toHaveLength(2);
+    });
+
+    const rejected = lines.find((line) => line.message === 'Operación rechazada');
+    expect(rejected).toMatchObject({
+      level: 'warn',
+      service_name: 'energy-dispatch-service',
+      environment: 'test',
+      correlation_id: CORRELATION_ID,
+      operation: 'GetChargingSession',
+      http_status: 404,
+    });
+    // Error tipado y esperado: tipo, código y mensaje, sin stack.
+    const error = (rejected?.error ?? {}) as Record<string, unknown>;
+    expect(Object.keys(error).sort()).toEqual(['code', 'message', 'type']);
+    expect(Object.values(error).every((value) => typeof value === 'string')).toBe(true);
+    const requests = lines.filter((line) => line.event === 'http_request');
+    expect(requests.map((line) => line.operation)).toEqual([
+      'GetChargingSession',
+      'GET /v1/no-existe',
+    ]);
+    expect(requests[0]).toMatchObject({ correlation_id: CORRELATION_ID, http_status: 404 });
+    for (const line of lines) {
+      for (const field of [
+        'timestamp',
+        'level',
+        'environment',
+        'service_name',
+        'correlation_id',
+        'operation',
+        'message',
+      ]) {
+        expect(line).toHaveProperty(field);
+      }
+    }
+    expect(JSON.stringify(lines)).not.toContain('secreto-123');
   });
 });

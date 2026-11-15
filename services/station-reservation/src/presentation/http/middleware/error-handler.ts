@@ -20,7 +20,7 @@ export function errorHandler(logger: Logger) {
   return (error: unknown, req: Request, res: Response, next: NextFunction): void => {
     if (res.headersSent) {
       // Ya se respondió (p. ej. por timeout): solo se registra.
-      logger.warn('Error tras enviar la respuesta', { error: describe(error) });
+      logger.warn('Error tras enviar la respuesta', { error });
       next(error);
       return;
     }
@@ -28,9 +28,16 @@ export function errorHandler(logger: Logger) {
     const problem = toProblem(error, req.originalUrl, correlationId);
     if (problem.status >= 500) {
       logger.error('Error no controlado', {
-        error: describe(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        code: problem.code,
+        error,
+        http_status: problem.status,
+        problem_code: problem.code,
+      });
+    } else if (error instanceof DomainError || error instanceof ApplicationError) {
+      // Rechazo de negocio (saldo, disponibilidad, estado): clave para rastrear una SAGA.
+      logger.warn('Operación rechazada', {
+        error,
+        http_status: problem.status,
+        problem_code: problem.code,
       });
     }
     sendProblem(res, problem);
@@ -84,8 +91,4 @@ function isBodyParserError(error: unknown): boolean {
   }
   const { type } = error as BodyParserError;
   return type === 'entity.parse.failed' || type === 'entity.too.large';
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }

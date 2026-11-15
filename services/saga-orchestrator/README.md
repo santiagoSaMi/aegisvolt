@@ -1,6 +1,6 @@
 # saga-orchestrator-service
 
-Orquestador de la SAGA **"Reservar y Activar Carga"** (bounded context *Charging Orchestration*, ADR-0002/0003). Tiene persistencia propia (`aegisvolt-sagas-<env>`) y arquitectura hexagonal. Decisiones de la implementación: [ADR-0024](../../docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md). Diseño y diagramas: [02-saga.md](../../docs/architecture/02-saga.md). Contrato: `sagaOrchestratorV1` 1.1.0. Evidencia con datos de DynamoDB: [runbook](../../docs/runbooks/saga-demo.md).
+Orquestador de la SAGA **"Reservar y Activar Carga"** (bounded context *Charging Orchestration*, ADR-0002/0003). Tiene persistencia propia (`aegisvolt-sagas-<env>`) y arquitectura hexagonal. Decisiones de la implementación: [ADR-0024](../../docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md). Diseño y diagramas: [02-saga.md](../../docs/architecture/02-saga.md). Contrato: `sagaOrchestratorV1` 1.2.0. Evidencia con datos de DynamoDB: [runbook](../../docs/runbooks/saga-demo.md).
 
 > Es una SAGA con **compensaciones**, no una transacción ACID: cada servicio confirma su paso localmente y los fallos se corrigen con operaciones de negocio inversas, idempotentes y verificadas.
 
@@ -12,6 +12,7 @@ Orquestador de la SAGA **"Reservar y Activar Carga"** (bounded context *Charging
 | `GET /v1/sagas/{sagaId}` | `GetSaga` | Vista con pasos, claves idempotentes y fallo de compensación |
 | `GET /v1/sagas/{sagaId}/events` | `ListSagaEvents` | Historial completo |
 | `GET /v1/sagas?fleetId=&status=&limit=` | `ListFleetSagas` | — |
+| `GET /v1/audit/sagas?status=&updatedAfter=&updatedBefore=&limit=&cursor=` | `ListSagasByStatus` | Desde 1.2.0. Auditoría de Prefect ([ADR-0030](../../docs/adr/0030-prefect-auditoria-solo-lectura-por-apis.md)): todas las flotas, la más antigua primero, índice por estado (sin Scan), cursor ligado al estado. Solo lectura |
 | `POST /v1/sagas/{sagaId}/compensation/retry` | `RetryCompensation` (controlado) | `200` / `202` · `409 SAGA_NOT_RETRYABLE` · `409 SAGA_BUSY` |
 | `GET /health/live`, `GET /health/ready` | — | Readiness con drenado al apagar |
 

@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import {
   HTTP_HEADERS,
   energyDispatchV1 as api,
@@ -75,7 +76,7 @@ export function sessionRoutes(useCases: SessionUseCases): Router {
   const router = Router();
 
   /** Paso 3 de la SAGA: id pre-generado por el orquestador (clave idempotente). */
-  router.put(ROUTES.session, async (req, res) => {
+  router.put(ROUTES.session, logOperation('StartChargingSession'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     const body = parseRequest(api.activateSessionRequestSchema, req.body, 'body');
     sagaHeaders(req, body.sagaId);
@@ -87,13 +88,13 @@ export function sessionRoutes(useCases: SessionUseCases): Router {
     sendJson(res, result.kind === 'STARTED' ? 201 : 200, toSessionView(result.session));
   });
 
-  router.get(ROUTES.session, async (req, res) => {
+  router.get(ROUTES.session, logOperation('GetChargingSession'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     sendJson(res, 200, toSessionView(await useCases.getChargingSession.execute(sessionId)));
   });
 
   /** Parada normal (usuario u operador), idempotente. */
-  router.post(ROUTES.stopSession, async (req, res) => {
+  router.post(ROUTES.stopSession, logOperation('StopChargingSession'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     const { reason } = parseRequest(api.stopSessionRequestSchema, req.body ?? {}, 'body');
     const result = await useCases.stopChargingSession.execute({ sessionId, reason });
@@ -101,7 +102,7 @@ export function sessionRoutes(useCases: SessionUseCases): Router {
   });
 
   /** Compensación de la SAGA, idempotente. */
-  router.post(ROUTES.abortSession, async (req, res) => {
+  router.post(ROUTES.abortSession, logOperation('AbortChargingSession'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     parseRequest(api.abortSessionRequestSchema, req.body, 'body');
     sagaHeaders(req);
@@ -114,7 +115,7 @@ export function sessionRoutes(useCases: SessionUseCases): Router {
   });
 
   /** Lectura del cargador (idempotente por `timestamp`). */
-  router.post(ROUTES.sessionTelemetry, async (req, res) => {
+  router.post(ROUTES.sessionTelemetry, logOperation('RecordTelemetry'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     const { timestamp, temperatureC, ...measures } = parseRequest(
       api.recordTelemetryRequestSchema,
@@ -132,7 +133,7 @@ export function sessionRoutes(useCases: SessionUseCases): Router {
     sendJson(res, result.outcome === 'RECORDED' ? 201 : 200, toTelemetryView(result.record));
   });
 
-  router.get(ROUTES.sessionTelemetry, async (req, res) => {
+  router.get(ROUTES.sessionTelemetry, logOperation('ListSessionTelemetry'), async (req, res) => {
     const { sessionId } = parseRequest(sessionParamsSchema, req.params, 'params');
     const { limit } = parseRequest(api.listTelemetryQuerySchema, req.query, 'query');
     const items = await useCases.listSessionTelemetry.execute({ sessionId, limit });

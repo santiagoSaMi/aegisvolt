@@ -44,14 +44,23 @@ try {
   if (retryIndex >= 0) {
     const sagaId = process.argv[retryIndex + 1] ?? '';
     const saga = await useCases.retryCompensation.execute(sagaId);
-    logger.info('Reintento controlado terminado', { saga_id: saga.id, status: saga.status });
+    logger.info('Reintento controlado terminado', {
+      operation: 'RetryCompensation',
+      saga_id: saga.id,
+      status: saga.status,
+    });
   } else {
     const report = await useCases.recoverPendingSagas.execute();
-    logger.info('Recuperación terminada', { event: 'saga_recovery', ...report });
+    logger.info('Recuperación terminada', {
+      operation: 'RecoverSagas',
+      event: 'saga_recovery',
+      ...report,
+    });
   }
 } catch (error) {
   logger.error('Recuperación fallida', {
-    error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    operation: process.argv.includes('--retry') ? 'RetryCompensation' : 'RecoverSagas',
+    error,
   });
   process.exitCode = 1;
 } finally {

@@ -14,7 +14,7 @@
 | `terraform-check/` | Configuración Terraform mínima para verificar provider y backend S3 contra Floci |
 | `data/` | Estado persistente de Floci (**ignorado por Git**) |
 | `.tmp/` | Temporales: planes, kubeconfigs de prueba, `DOCKER_CONFIG` aislado (**ignorado por Git**) |
-| `../../../scripts/floci/` | `start.sh`, `stop.sh`, `status.sh`, `smoke-test.sh`, `terraform-check.sh`, `lib.sh` |
+| `../../../scripts/floci/` | `start.sh`, `stop.sh`, `status.sh`, `smoke-test.sh`, `terraform-check.sh`, `terraform-live.sh`, `cloudwatch-probe.sh`, `logging-k8s-verify.sh`, `lib.sh` |
 
 ## Requisitos
 
@@ -121,6 +121,17 @@ Diferencias con EKS real:
 - Login: `aws ecr get-login-password | docker login --username AWS --password-stdin localhost:4566`.
 - El backend es un contenedor `floci-aws-ecr-registry` (`registry:2`) en `127.0.0.1:5100`, que **sigue en ejecución** tras `stop.sh`.
 
+## CloudWatch y logs desde Kubernetes
+
+```bash
+scripts/floci/cloudwatch-probe.sh               # qué operaciones de Logs/Metrics funcionan de verdad (tabla Markdown)
+scripts/floci/terraform-live.sh dev apply        # log groups, metric filters, alarmas y dashboard del ambiente (también test, prod)
+scripts/floci/logging-k8s-verify.sh --env dev    # clúster temporal + Fluent Bit + pods emisores → logs, métricas y alarma (~5 min)
+```
+
+- **TLS:** `config/floci.env` activa `FLOCI_TLS_ENABLED=true`, porque el plugin `cloudwatch_logs` de Fluent Bit siempre usa TLS. HTTP sigue funcionando igual en el 4566. La CA local está en `data/tls/floci-root-ca.crt`; para usar HTTPS desde el host: `AWS_ENDPOINT_URL=https://localhost:4566 AWS_CA_BUNDLE=infra/local/floci/data/tls/floci-root-ca.crt`.
+- Los tres scripts limpian lo que crean, salvo `terraform-live.sh`, que nunca ejecuta `destroy`. Los informes quedan en `.tmp/`.
+
 ## Smoke tests
 
 ```bash
@@ -140,7 +151,7 @@ Floci **2.4.0**, ejecución completa `smoke-test.sh --with-eks` + `terraform-che
 | --- | --- | --- |
 | S3 | **funcional** | create/list bucket. Versionado `Enabled`: 2 versiones de `env:/dev/terraform.tfstate` y versión previa recuperada con `--version-id`. Persiste tras reinicio. |
 | DynamoDB | **funcional** | create-table, put/get/query. Escritura condicional duplicada rechazada con `ConditionalCheckFailedException`, base de la idempotencia de la SAGA. |
-| CloudWatch Logs | **funcional** | Log group `/aegisvolt/...` con retención de 7 días. `put-log-events`, `get-log-events` y `filter-log-events` por `correlation_id`. |
+| CloudWatch Logs | **funcional** (salvo Insights `stats`) | `cloudwatch-probe.sh`, 2026-11-14: grupos con retención y etiquetas; `put/get/filter-log-events` con patrones de texto y JSON (igualdad, numéricos, anidados); metric filters que generan métricas con valor y dimensión desde campos JSON; Logs Insights `fields`/`filter`/`sort` sobre varios grupos. **No:** Insights `stats` (la consulta termina `Failed`) ni EMF. |
 | API Gateway REST (v1) | **funcional** | REST API + recurso + integración MOCK + deployment/stage. Invocación `/execute-api/{id}/{stage}/health` y `{id}.execute-api.localhost.floci.io:4566` → 200. |
 | API Gateway HTTP (v2) | **no probado** | Solo `create-api`. Según la documentación, de las integraciones `AWS_PROXY` solo se invoca `SQS-SendMessage`; `HTTP_PROXY` está soportado, pero no se ha verificado aquí. |
 | API Gateway PRIVATE | **parcial** | Se acepta `types=PRIVATE` con `vpcEndpointIds`, pero la API responde 200 desde el host, fuera de la VPC. **No hay aislamiento de red.** |
@@ -154,7 +165,9 @@ Floci **2.4.0**, ejecución completa `smoke-test.sh --with-eks` + `terraform-che
 | DynamoDB transacciones, PITR y deletion protection | **funcional** | `TransactWriteItems` atómico con condiciones; PITR `ENABLED`; `DeleteTable` bloqueado con protección (verificado manualmente el 2026-11-12). |
 | ELBv2 NLB + VPC Link | **funcional** | Listener del NLB dentro del contenedor de Floci (`floci:<puerto>`) reenvía a *targets* `ip`. Cadena API Gateway → VPC Link → NLB → NodePort k3s → pod = 200 (manual, 2026-11-12). |
 | Cognito User Pools | **funcional** | `initiate-auth` → JWT RS256 con grupos y atributos custom; JWKS en `/<poolId>/.well-known/jwks.json` (manual, 2026-11-12). |
-| CloudWatch Metrics | **parcial** | `put-metric-data`, `get-metric-statistics` y metric filters funcionan; *metric math* no (manual, 2026-11-12). |
+| CloudWatch Metrics | **parcial** | `cloudwatch-probe.sh`, 2026-11-14: `put-metric-data`, `list-metrics`, `get-metric-statistics`, `get-metric-data` (MetricStat), alarmas de una métrica **evaluadas** (pasan a `ALARM`), `set-alarm-state`, historial, dashboards (solo se guardan). **No:** *metric math*. |
+| TLS (`FLOCI_TLS_ENABLED`) | **funcional** | HTTP y HTTPS en el mismo puerto 4566, CA local en `data/tls/`, SAN `floci`. Requerido por Fluent Bit ([ADR-0029](../../../docs/adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)). |
+| Fluent Bit 5.1.5 → CloudWatch Logs | **funcional** | `logging-k8s-verify.sh`, 2026-11-14: DaemonSet en el k3s de Floci → `/aegisvolt/<env>/<servicio>`, un stream por pod, JSON intacto, métricas y alarma. |
 | EKS endpoint privado | **solo metadatos** | `endpointPublicAccess=false` se guarda, pero `kubectl` accede desde el host. |
 | Pod → Floci | **parcial** | Por IP sí; el DNS `floci` no resuelve dentro de k3s. Solución: Service sin selector ([ADR-0012](../../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md)). |
 

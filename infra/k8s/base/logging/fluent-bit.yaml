@@ -1,0 +1,50 @@
+# Fluent Bit (DaemonSet): logs de los contenedores del nodo → CloudWatch Logs
+# en /aegisvolt/<env>/<service_name> (ADR-0029). Las salidas están en outputs.yaml
+# para que el componente `floci` pueda sustituirlas sin tocar el resto.
+service:
+  flush: 2
+  log_level: info
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 2020
+  health_check: on
+  # Búfer en disco del nodo: si CloudWatch no responde, los logs no se pierden al reiniciar el pod.
+  storage.path: /var/fluent-bit/state/flb-storage/
+  storage.sync: normal
+  storage.backlog.mem_limit: 16M
+
+includes:
+  - outputs.yaml
+
+pipeline:
+  inputs:
+    - name: tail
+      tag: kube.*
+      path: /var/log/containers/*.log
+      # Los propios logs del colector no se reenvían (evita bucles).
+      exclude_path: /var/log/containers/fluent-bit-*_logging_*.log
+      # containerd (EKS y k3s) escribe en formato CRI.
+      multiline.parser: cri
+      db: /var/fluent-bit/state/tail.db
+      db.locking: true
+      mem_buf_limit: 32MB
+      skip_long_lines: on
+      refresh_interval: 10
+      storage.type: filesystem
+
+  filters:
+    - name: kubernetes
+      match: kube.*
+      kube_tag_prefix: kube.var.log.containers.
+      # La línea JSON de la app se envía tal cual (log_key log): no se fusiona.
+      merge_log: off
+      keep_log: on
+      labels: on
+      annotations: off
+      k8s-logging.exclude: on
+
+    # Solo las unidades de AegisVolt. Se decide por la etiqueta del manifiesto,
+    # nunca por el contenido del log.
+    - name: grep
+      match: kube.*
+      regex: $kubernetes['labels']['app.kubernetes.io/part-of'] ^aegisvolt$

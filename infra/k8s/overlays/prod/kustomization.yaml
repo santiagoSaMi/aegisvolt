@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Clúster prod (ADR-0012). Por ahora solo la recolección de logs (ADR-0029); la
+# fase de K8s añade las aplicaciones.
+resources:
+  - ../../base/logging
+components:
+  # Local: los logs van a Floci. En AWS real se quita este componente.
+  - ../../components/floci
+patches:
+  - target:
+      kind: DaemonSet
+      name: fluent-bit
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: prod

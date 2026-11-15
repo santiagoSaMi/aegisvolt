@@ -1,0 +1,23 @@
+# Salida a CloudWatch Logs de FLOCI (solo local). Igual que la de base/logging,
+# más el endpoint del emulador: Service `floci` (sin selector), puerto 4566.
+# El plugin cloudwatch_logs SIEMPRE usa TLS (ignora `tls: off`, verificado con
+# 5.1.5): Floci sirve HTTPS en el mismo puerto (FLOCI_TLS_ENABLED) y el
+# certificado se valida contra la CA local de Floci (ConfigMap floci-ca).
+# Credenciales ficticias desde el Secret floci-aws.
+pipeline:
+  outputs:
+    - name: cloudwatch_logs
+      match: kube.*
+      region: ${AWS_REGION}
+      endpoint: floci
+      port: 4566
+      tls.verify: on
+      tls.ca_file: /fluent-bit/floci-ca/floci-root-ca.crt
+      log_group_name: /aegisvolt/${AEGISVOLT_ENV}/unclassified
+      log_group_template: /aegisvolt/${AEGISVOLT_ENV}/$kubernetes['labels']['app.kubernetes.io/name']
+      log_stream_prefix: unnamed-
+      log_stream_template: $kubernetes['pod_name']
+      log_key: log
+      auto_create_group: false
+      retry_limit: 5
+      workers: 1

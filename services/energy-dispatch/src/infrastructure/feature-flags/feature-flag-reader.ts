@@ -24,7 +24,7 @@ export function createFeatureFlagReader(deps: {
           event: 'feature_flag_read_failed',
           flag: key,
           fallback,
-          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          error,
         });
       },
     },

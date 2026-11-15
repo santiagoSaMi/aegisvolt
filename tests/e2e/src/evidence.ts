@@ -1,6 +1,6 @@
 // Evidencia de DynamoDB: lee (solo lectura, como Prefect) los ítems que dejó
 // cada escenario en las tablas de los cuatro servicios y los guarda en JSON.
-import { writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
@@ -111,4 +111,18 @@ function pick(item: Item | undefined, fields: readonly string[]): Item | undefin
     return undefined;
   }
   return Object.fromEntries(fields.filter((f) => f in item).map((f) => [f, item[f]]));
+}
+
+/**
+ * Líneas JSON de los logs de todos los procesos del stack con un
+ * `correlation_id` dado: la misma búsqueda que se hace en CloudWatch Logs.
+ */
+export function logsFor(correlationId: string): Record<string, unknown>[] {
+  const dir = join(EVIDENCE_DIR, 'logs');
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.log'))
+    .flatMap((file) => readFileSync(join(dir, file), 'utf8').split('\n'))
+    .filter((line) => line.startsWith('{') && line.includes(correlationId))
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((entry) => entry.correlation_id === correlationId);
 }

@@ -81,7 +81,7 @@ infra/k8s/
   - Todos con `readinessProbe` (`/health/ready`: DynamoDB y flags accesibles), `livenessProbe` (`/health/live`), `resources`, `securityContext` no root y `PodDisruptionBudget`.
 - **Acceso de los pods a Floci:**
   - El compose de Floci tendrá una **IP fija** en la red `aegisvolt-floci` (cambio pendiente, a implementar en la fase de K8s).
-  - El componente Kustomize `floci` crea un Service `floci` sin selector con un EndpointSlice hacia esa IP. Así `http://floci:4566` funciona y coincide con el `iss` de los tokens de Cognito.
+  - El componente Kustomize `floci` crea un Service `floci` sin selector con un EndpointSlice hacia esa IP. Así `floci:4566` funciona por HTTP y por HTTPS (con el SAN `floci`), y coincide con el `iss` de los tokens de Cognito (`https://floci:4566/...`).
   - Verificado: un pod alcanza `floci:4566` con este mecanismo.
 
 ### Imágenes y promoción

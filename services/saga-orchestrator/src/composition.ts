@@ -5,6 +5,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   GetSaga,
   ListFleetSagas,
+  ListSagasByStatus,
   ListSagaEvents,
   RecoverPendingSagas,
   ReserveAndActivateCharging,
@@ -80,6 +81,7 @@ export function createUseCases(deps: CompositionDeps) {
     getSaga: new GetSaga({ sagas }),
     listSagaEvents: new ListSagaEvents({ sagas }),
     listFleetSagas: new ListFleetSagas({ sagas }),
+    listSagasByStatus: new ListSagasByStatus({ sagas }),
   };
 }
 

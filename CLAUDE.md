@@ -133,7 +133,7 @@ Además:
 
 ### Observabilidad
 
-- Los logs son JSON y siempre incluyen `timestamp`, `level`, `service`, `environment`, `correlation_id` y `message`.
+- Los logs son JSON y siempre incluyen `timestamp`, `level`, `service_name`, `environment`, `correlation_id`, `operation` y `message`; además `saga_id` cuando aplica y `error` tipado (`{type, code, message}`) cuando hay error (ADR-0028).
 - Los grupos de logs de CloudWatch se separan por ambiente: `/aegisvolt/<env>/<service>`.
 - Los flujos de Prefect revisan la salud de los tres ambientes, auditan la consistencia de las SAGA (huérfanas o compensadas) y reportan métricas.
 

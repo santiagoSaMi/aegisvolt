@@ -63,12 +63,17 @@ async function bootstrap(): Promise<void> {
 
   const server = app.listen(config.port, (error?: Error) => {
     if (error) {
-      logger.fatal('No se pudo abrir el puerto HTTP', { port: config.port, error: error.message });
+      logger.fatal('No se pudo abrir el puerto HTTP', {
+        operation: 'Startup',
+        port: config.port,
+        error,
+      });
       process.exitCode = 1;
       client.destroy();
       return;
     }
     logger.info('Servicio iniciado', {
+      operation: 'Startup',
       port: config.port,
       flags_table: config.featureFlags.tableName,
       introspection: config.graphql.introspection,
@@ -102,6 +107,6 @@ bootstrap().catch((error: unknown) => {
     service: SERVICE_NAME,
     environment: process.env.APP_ENV ?? 'unknown',
     version: process.env.SERVICE_VERSION ?? 'unknown',
-  }).fatal('Arranque fallido', { error: error instanceof Error ? error.message : String(error) });
+  }).fatal('Arranque fallido', { operation: 'Startup', error });
   process.exitCode = 1;
 });

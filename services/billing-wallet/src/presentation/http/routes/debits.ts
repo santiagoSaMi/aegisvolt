@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import {
   HTTP_HEADERS,
   billingWalletV1 as api,
@@ -56,7 +57,7 @@ export function debitRoutes(useCases: DebitUseCases): Router {
   const router = Router();
 
   /** Débito con id pre-generado por la SAGA: el id es la clave idempotente. */
-  router.put(ROUTES.debit, async (req, res) => {
+  router.put(ROUTES.debit, logOperation('DebitWallet'), async (req, res) => {
     const { debitId } = parseRequest(debitParamsSchema, req.params, 'params');
     const body = parseRequest(api.debitRequestSchema, req.body, 'body');
     sagaHeaders(req, body.sagaId);
@@ -69,7 +70,7 @@ export function debitRoutes(useCases: DebitUseCases): Router {
   });
 
   /** Débito con cabecera `idempotency-key`: el id se deriva de la clave (`dbt_<clave>`). */
-  router.post(ROUTES.debits, async (req, res) => {
+  router.post(ROUTES.debits, logOperation('DebitWallet'), async (req, res) => {
     const headers = parseRequest(idempotentCommandHeadersSchema, req.headers, 'headers');
     const body = parseRequest(api.createDebitRequestSchema, req.body, 'body');
     const idempotencyKey = headers[HTTP_HEADERS.idempotencyKey];
@@ -83,7 +84,7 @@ export function debitRoutes(useCases: DebitUseCases): Router {
     sendJson(res, statusFor(result), toDebitView(result.debit));
   });
 
-  router.get(ROUTES.debit, async (req, res) => {
+  router.get(ROUTES.debit, logOperation('GetDebit'), async (req, res) => {
     const { debitId } = parseRequest(debitParamsSchema, req.params, 'params');
     const stored = await useCases.getDebit.execute(debitId);
     if (stored.kind === 'TOMBSTONE') {
@@ -93,7 +94,7 @@ export function debitRoutes(useCases: DebitUseCases): Router {
   });
 
   /** Compensación: reembolso como operación propia (idempotente). */
-  router.post(ROUTES.refundDebit, async (req, res) => {
+  router.post(ROUTES.refundDebit, logOperation('RefundWallet'), async (req, res) => {
     const { debitId } = parseRequest(debitParamsSchema, req.params, 'params');
     const { reason } = parseRequest(api.refundDebitRequestSchema, req.body, 'body');
     const headers = sagaHeaders(req);

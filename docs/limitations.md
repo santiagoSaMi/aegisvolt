@@ -45,9 +45,10 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 ## L-04 · Canary con métricas de CloudWatch
 
 - **Requisito:** §3.3 — health checks y métricas de error en CloudWatch antes de promover del 20 % al 100 %.
-- **Estado** (verificado el 2026-11-12):
+- **Estado** (verificado el 2026-11-12 y de nuevo con `scripts/floci/cloudwatch-probe.sh` el 2026-11-14):
   - Funcionan `put-metric-data`, `get-metric-statistics`, `get-metric-data` con `MetricStat` y los metric filters de Logs (un log de error genera la métrica).
-  - Una expresión de *metric math* (`100*e/r`) **no devolvió resultado**, como anticipaba la documentación. Las alarmas no se han probado.
+  - Una expresión de *metric math* (`100*e/r`) **no devolvió resultado**, como anticipaba la documentación.
+  - Las alarmas de **una sola métrica** sí se evalúan: pasan a `ALARM` con datos de un metric filter.
 - **Propuesta:** el análisis canary calcula la tasa de error en un Job a partir de CloudWatch Logs ([ADR-0013](adr/0013-canary-argo-rollouts-analisis-cloudwatch.md)).
 
 ## L-05 · API Gateway HTTP (v2) sin verificar
@@ -61,14 +62,23 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Comportamiento observado:**
   - CoreDNS reenvía al `resolv.conf` del nodo k3s, que apunta al DNS embebido de Docker y no es alcanzable desde los pods (`nslookup floci` → NXDOMAIN).
   - Los pods sí alcanzan a Floci por IP.
-  - El `iss` de los tokens de Cognito usa `http://floci:4566/...`.
+  - El `iss` de los tokens de Cognito usa `https://floci:4566/...` (con `FLOCI_TLS_ENABLED`, ADR-0029).
 - **Propuesta (verificada):** un Service `floci` sin selector + EndpointSlice hacia una IP fija de Floci en la red `aegisvolt-floci` ([ADR-0012](adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md)). La IP fija se configurará en el compose en la fase de K8s.
 
 ## L-06 · Exposición de puertos de contenedores hermanos
 
 - El API server de k3s se publica en `0.0.0.0:65xx` del host, no solo en loopback.
 - El registry de ECR (`127.0.0.1:5100`) sigue en ejecución después de `stop.sh`.
-- **Mitigación:** uso exclusivamente local. Se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST` en el futuro.
+- **Consola web de Floci** (verificado el 2026-11-14 con Floci 2.4.0):
+  - Abrir `http://localhost:4566/_floci/ui` descarga `floci/floci-ui:0.7.0` y arranca el contenedor hermano `floci-aws-ui` en **`0.0.0.0:4500`**, accesible desde la red local, no solo desde el equipo.
+  - **No tiene autenticación** y permite crear y borrar recursos del emulador (log groups, alarmas, tablas…).
+  - Carga fuentes desde Google Fonts, así que hace peticiones a internet.
+  - Sigue en ejecución hasta detenerla (`stop.sh` no la detiene).
+- **Mitigación:**
+  - uso exclusivamente local;
+  - abrir la consola solo cuando se necesite y detenerla al terminar (`docker stop floci-aws-ui`);
+  - para consultas, preferir AWS CLI, que solo usa `127.0.0.1:4566` ([runbook](runbooks/cloudwatch-demo.md));
+  - más adelante se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST`.
 
 ## L-08 · Floci no evalúa IAM: el aislamiento de flags por ambiente no depende de políticas
 
@@ -82,3 +92,19 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 
   Lo demuestran la prueba de integración y el [runbook](runbooks/feature-flags-demo.md).
 - **En AWS real (fase de IaC):** además, el rol IAM de cada pod solo puede leer `aegisvolt-feature-flags-<su env>`, y solo el graphql-api de ese ambiente puede escribirla. Se verificará con `terraform plan`; Floci no lo puede demostrar.
+
+## L-09 · CloudWatch en Floci: sin Logs Insights `stats` ni EMF; Fluent Bit necesita TLS
+
+- **Requisito:** §2.5 y §5 (punto 4): logs centralizados por ambiente, métricas y trazabilidad por `correlation_id` en CloudWatch.
+- **Comportamiento observado** (Floci 2.4.0, `scripts/floci/cloudwatch-probe.sh`, 2026-11-14):
+  - Logs Insights solo ejecuta `fields`, `filter` y `sort`. Una consulta con `stats … by` termina `Failed`, sin filas.
+  - Un log con formato EMF (`_aws.CloudWatchMetrics`) no genera métricas.
+  - *Metric math* no devuelve resultados (L-04).
+  - El plugin `cloudwatch_logs` de Fluent Bit 5.1.5 siempre usa TLS (ignora `tls: off`) y no puede hablar con el HTTP de Floci.
+- **Cómo se cumple de forma verificable** ([ADR-0029](adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)):
+  - Las métricas salen de **metric filters** (verificados con valor y dimensión desde campos JSON), declarados en Terraform, en lugar de EMF o `stats`.
+  - Las agregaciones se consultan con `GetMetricStatistics`; Prefect calcula tasas en el cliente.
+  - La traza de una SAGA usa `FilterLogEvents` por grupo o Logs Insights `fields`/`filter`/`sort` sobre los grupos del ambiente (verificado con 5 grupos).
+  - Floci corre con `FLOCI_TLS_ENABLED=true`: HTTP y HTTPS en el mismo puerto. Fluent Bit valida el certificado con la CA local de Floci (`tls.verify: on`).
+  - La recolección completa (pods → Fluent Bit → log groups → métricas → alarma) se verifica con `scripts/floci/logging-k8s-verify.sh`.
+- **En AWS real** funcionan `stats`, EMF y *metric math*; el diseño no depende de ellos.
