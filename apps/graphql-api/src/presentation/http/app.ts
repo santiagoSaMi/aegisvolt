@@ -14,6 +14,8 @@ export interface HttpAppDependencies {
   readonly tokens: TokenVerifier;
   readonly readinessCheck: () => Promise<boolean>;
   readonly logger: Logger;
+  /** Versión desplegada: se devuelve en `x-service-version` (identifica stable/canary, ADR-0032). */
+  readonly serviceVersion?: string;
 }
 
 /**
@@ -66,6 +68,15 @@ function healthRoutes(readinessCheck: () => Promise<boolean>): Router {
 export function createHttpApp(deps: HttpAppDependencies): Express {
   const app = express();
   app.disable('x-powered-by');
+  const version = deps.serviceVersion;
+  if (version !== undefined) {
+    // Qué versión atendió cada respuesta: así se mide la distribución real del
+    // tráfico entre stable y canary (no se infiere del número de pods).
+    app.use((_req, res, next) => {
+      res.setHeader('x-service-version', version);
+      next();
+    });
+  }
   app.use(correlation());
   app.use(requestLogger(deps.logger));
   app.use(healthRoutes(deps.readinessCheck));

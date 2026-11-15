@@ -67,7 +67,7 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0010](../adr/0010-red-apigw-vpc-link-nlb-y-vpce.md) | Red: API Gateway + VPC Link + NLB y VPCE | Aceptado |
 | [0011](../adr/0011-terraform-workspaces-backend-s3-bootstrap.md) | Terraform: workspaces, backend S3 y bootstrap | Aceptado |
 | [0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md) | EKS por ambiente, Kustomize y acceso a Floci | Aceptado |
-| [0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md) | Canary con Argo Rollouts y análisis en CloudWatch | Aceptado |
+| [0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md) | Canary con Argo Rollouts y análisis en CloudWatch | Reemplazado por 0032 |
 | [0014](../adr/0014-observabilidad-cloudwatch-fluent-bit-prefect.md) | Observabilidad: CloudWatch, Fluent Bit y Prefect | Aceptado |
 | [0015](../adr/0015-cicd-github-actions-hibrido-y-promocion.md) | CI/CD híbrido y promoción entre ramas | Propuesto (P-21, P-22) |
 | [0016](../adr/0016-estrategia-de-pruebas.md) | Estrategia de pruebas | Aceptado |
@@ -86,5 +86,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0029](../adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md) | CloudWatch por ambiente: Fluent Bit como colector, log groups y métricas de la SAGA desde Terraform | Aceptado |
 | [0030](../adr/0030-prefect-auditoria-solo-lectura-por-apis.md) | Prefect como auditor de solo lectura a través de las APIs de cada servicio | Aceptado |
 | [0031](../adr/0031-contenedores-kubernetes-floci.md) | Imágenes de contenedor, manifiestos de Kubernetes y desarrollo local con Floci | Aceptado |
+| [0032](../adr/0032-canary-argo-rollouts-traefik-cloudwatch.md) | Canary de graphql-api con Argo Rollouts, reparto por peso en Traefik y análisis en CloudWatch | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

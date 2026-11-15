@@ -8,6 +8,8 @@ resources:
 components:
   # Local: AWS = Floci (endpoint, credenciales ficticias, logs). En AWS real se quita.
   - ../../components/floci
+  # Canary de graphql-api (Argo Rollouts + Traefik); requiere infra/k8s/platform.
+  - ../../components/canary
 configMapGenerator:
   - name: station-reservation-service-config
     namespace: aegisvolt
@@ -68,3 +70,27 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/cpu
         value: 100m
+  # graphql-api lo gestiona el Rollout (workloadRef): su Deployment queda en 0 y las
+  # 2 réplicas de prod van en el Rollout.
+  - target:
+      kind: Deployment
+      name: graphql-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
+  - target:
+      kind: Rollout
+      name: graphql-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  # Métricas del análisis canary en el namespace AegisVolt/prod.
+  - target:
+      kind: AnalysisTemplate
+      name: graphql-api-canary-health
+    patch: |-
+      - op: replace
+        path: /spec/args/1/value
+        value: prod

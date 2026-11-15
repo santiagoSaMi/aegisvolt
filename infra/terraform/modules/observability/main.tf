@@ -95,6 +95,38 @@ resource "aws_cloudwatch_log_metric_filter" "http_5xx" {
   }
 }
 
+# --- BFF por versión (análisis canary, ADR-0032) ------------------------------------
+# GraphQL responde HTTP 200 aunque falle un servicio interno: la tasa de error del BFF
+# se mide con las líneas `graphql_operation` (resultado de cada operación) por versión.
+
+resource "aws_cloudwatch_log_metric_filter" "graphql_operations" {
+  name           = "GraphqlOperations"
+  log_group_name = aws_cloudwatch_log_group.this[var.bff_service].name
+  pattern        = "{ $.event = \"graphql_operation\" }"
+
+  metric_transformation {
+    name       = "GraphqlOperations"
+    namespace  = local.namespace
+    value      = "1"
+    unit       = "Count"
+    dimensions = { ServiceName = "$.service_name", Version = "$.version" }
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "graphql_server_errors" {
+  name           = "GraphqlServerErrors"
+  log_group_name = aws_cloudwatch_log_group.this[var.bff_service].name
+  pattern        = "{ ($.event = \"graphql_operation\") && ($.outcome = \"server_error\") }"
+
+  metric_transformation {
+    name       = "GraphqlServerErrors"
+    namespace  = local.namespace
+    value      = "1"
+    unit       = "Count"
+    dimensions = { ServiceName = "$.service_name", Version = "$.version" }
+  }
+}
+
 # --- Alarmas (una sola métrica: Floci no evalúa metric math) ------------------------
 
 resource "aws_cloudwatch_metric_alarm" "saga_compensation_failed" {

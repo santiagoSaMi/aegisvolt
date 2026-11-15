@@ -1,6 +1,6 @@
 # 05 · Terraform, EKS/Kubernetes, despliegues y canary
 
-Cubre los puntos 14 y 15. Decisiones: [ADR-0011](../adr/0011-terraform-workspaces-backend-s3-bootstrap.md), [ADR-0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md) y [ADR-0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md).
+Cubre los puntos 14 y 15. Decisiones: [ADR-0011](../adr/0011-terraform-workspaces-backend-s3-bootstrap.md), [ADR-0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md) y [ADR-0032](../adr/0032-canary-argo-rollouts-traefik-cloudwatch.md) (reemplaza a ADR-0013).
 
 ## 14. Terraform: workspaces y backend S3 remoto
 
@@ -91,38 +91,17 @@ infra/k8s/
 
 ### Canary
 
-**Herramienta:** Argo Rollouts v1.10.2 (última estable verificada), con estrategia **canary basada en réplicas**, sin *traffic router*. Según su documentación, el reparto se logra "via a weighted replica counts". Como el Service `ClusterIP` selecciona pods stable y canary por igual, el porcentaje de tráfico es aproximadamente el porcentaje de pods.
+> Este apartado se rediseñó tras verificar contra el clúster ([ADR-0032](../adr/0032-canary-argo-rollouts-traefik-cloudwatch.md), que reemplaza a [ADR-0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md)). El diseño anterior repartía por réplicas y analizaba con un Job, porque se suponía que el proveedor CloudWatch no estaba en el núcleo de Argo. No era así.
 
-```yaml
-strategy:
-  canary:
-    canaryMetadata: { labels: { track: canary } }
-    stableMetadata: { labels: { track: stable } }
-    steps:
-      - setWeight: 20          # 1 de 5 réplicas
-      - pause: { duration: 60s }
-      - analysis: { templates: [{ templateName: canary-health }] }
-      - setWeight: 100
-```
-
-| Ambiente | Réplicas por app | Peso canary efectivo |
-| --- | --- | --- |
-| `dev` | 2 | 50 % (1 de 2): no se puede representar el 20 %; se documenta |
-| `test` | 5 en `graphql-api` y orquestador; 2 en el resto | 20 % / 50 % |
-| `prod` | 5 | 20 % |
-
-**Análisis** (pregunta §6.2). El `AnalysisTemplate canary-health` usa el proveedor **Kubernetes Job**, porque el proveedor CloudWatch no está en el núcleo de Argo Rollouts y no se pudo verificar un endpoint configurable. El Job ejecuta un *checker* (imagen propia con AWS CLI) contra CloudWatch (Floci en local):
-
-1. **Tasa de error de la versión canary:**
-   - Cuenta en `/aegisvolt/<env>/<app>` los logs con `version = <sha canary>` y `http_status >= 500` o `level = "error"`, frente al total de requests de esa versión en la ventana.
-   - Se cuenta en el cliente con `FilterLogEvents`, porque Floci no soporta *metric math* ni `stats` en Logs Insights (verificado y documentado).
-2. **Umbral de éxito:** tasa ≤ 1 % **y** al menos 30 requests en la ventana. El *pipeline* genera tráfico sintético con una flota `canary-probe`.
-3. **Salud:** todas las réplicas canary `Ready` y `/health/ready` = 200.
-4. **Resultados de negocio:** las SAGAs `COMPENSATED` (fondos insuficientes o falla simulada) son **resultados válidos** con HTTP 200 y no cuentan como error. Así, la demo de fallos no provoca un rollback.
-
-Si el análisis falla, Argo Rollouts aborta y **vuelve automáticamente** a la versión stable (escala el ReplicaSet canary a 0). El job de CD espera con `kubectl argo rollouts status --timeout` y falla visiblemente.
-
-Pendiente de verificar en las fases de K8s y CI/CD: `canaryMetadata`/`stableMetadata`, el soporte de patrones JSON en `FilterLogEvents` de Floci, el consumo de memoria de tres clústeres k3s simultáneos (riesgo R-02) y el plugin `kubectl argo rollouts`.
+- **Qué se canariza:** graphql-api, que recibe el tráfico externo. Los servicios internos (este-oeste por `ClusterIP`) usan `RollingUpdate`; repartirlos por peso exigiría una malla de servicios.
+- **Herramientas:** Argo Rollouts v1.10.1 con `trafficRouting.traefik`. Traefik v3.7.16 reparte por peso con un `TraefikService` (WRR). El porcentaje no depende del número de pods.
+- **Pasos:** `setWeight: 20` (80/20) → `analysis` → `setWeight: 50` → `analysis` → 100 %. Si falla, se aborta y se vuelve a 100/0 automáticamente.
+- **Versiones identificables:** etiqueta `version=<sha>` en la plantilla, cabecera `x-service-version` en cada respuesta y campo `version` en cada log.
+- **Análisis** (pregunta §6.2), con el proveedor CloudWatch nativo de Argo (contra Floci en local):
+  1. **Disponibilidad:** `/health/ready` del canary cada 10 s, al menos 11 de 12 sondeos.
+  2. **Tasa de error del servidor:** métricas `GraphqlOperations` y `GraphqlServerErrors` por `Version`, que generan los metric filters sobre el log `graphql_operation`. Umbral ≤ 2 % con **al menos 30 operaciones** en 3 min; con menos, la medición es Inconclusive y el Rollout se pausa.
+  3. **Resultados de negocio:** errores de cliente y SAGAs `COMPENSATED` no cuentan como error. Así, la demo de fallos no provoca un rollback.
+- **Evidencia** (promoción, rollback inducido y pausa por muestra insuficiente, con el tráfico medido por respuesta): [runbook](../runbooks/canary-demo.md).
 
 ## Diagrama de despliegue
 

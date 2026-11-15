@@ -75,3 +75,6 @@ tests/e2e/.evidence/
 
 # --- Prefect (estado local del servidor) ---
 prefect/.prefect-home/
+
+# --- Manifiestos de terceros de Kubernetes (scripts/k8s/vendor-platform.sh, sha256 fijado) ---
+infra/k8s/platform/*/vendor/

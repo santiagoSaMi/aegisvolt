@@ -72,6 +72,7 @@ beforeEach(async () => {
     tokens,
     readinessCheck: () => Promise.resolve(ready),
     logger,
+    serviceVersion: 'sha-test-v1',
   });
   server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -194,5 +195,44 @@ describe('logs estructurados (ADR-0028)', () => {
     expect(rejected).toMatchObject({ level: 'warn', event: 'auth_rejected' });
     expect(JSON.stringify(logLines)).not.toContain('tok-secreto-xyz');
     expect(JSON.stringify(logLines)).not.toContain('valid-op');
+  });
+});
+
+describe('versión y resultado de cada operación (canary, ADR-0032)', () => {
+  it('cada respuesta identifica la versión que la atendió', async () => {
+    const response = await post(
+      { query: '{ featureFlags { environment } }' },
+      { authorization: 'Bearer valid-op' },
+    );
+    expect(response.headers.get('x-service-version')).toBe('sha-test-v1');
+    expect((await fetch(`${url}/health/live`)).headers.get('x-service-version')).toBe(
+      'sha-test-v1',
+    );
+  });
+
+  it('registra graphql_operation con el resultado: ok y client_error', async () => {
+    const okId = '9f4a3e1b-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+    const badId = '0a5b4f2c-6b7c-4d8e-9f0a-1b2c3d4e5f60';
+    await post(
+      { query: '{ featureFlags { environment } }' },
+      { authorization: 'Bearer valid-op', 'x-correlation-id': okId },
+    );
+    await post({ query: '{ featureFlags { environment } }' }, { 'x-correlation-id': badId }); // sin token
+
+    const operation = (id: string) =>
+      logLines.find((line) => line.event === 'graphql_operation' && line.correlation_id === id);
+    await vi.waitFor(() => {
+      expect(operation(okId)).toBeDefined();
+      expect(operation(badId)).toBeDefined();
+    });
+    expect(operation(okId)).toMatchObject({
+      outcome: 'ok',
+      operation: 'query.featureFlags',
+      level: 'info',
+    });
+    expect(operation(badId)).toMatchObject({
+      outcome: 'client_error',
+      error_codes: ['UNAUTHENTICATED'],
+    });
   });
 });

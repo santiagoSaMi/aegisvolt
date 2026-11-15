@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Canary de graphql-api con Argo Rollouts + Traefik (ADR-0032). Requiere la
+# plataforma (infra/k8s/platform): CRDs de Argo Rollouts y de Traefik.
+resources:
+  - rollout.yaml
+  - services.yaml
+  - traefik.yaml
+  - analysis-template.yaml
+patches:
+  # El Rollout gestiona los pods a partir de la plantilla del Deployment
+  # (workloadRef): el Deployment queda en 0 réplicas y sigue siendo la fuente de la
+  # plantilla (imagen, configuración, probes, seguridad).
+  - target:
+      kind: Deployment
+      name: graphql-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
