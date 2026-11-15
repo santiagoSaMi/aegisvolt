@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 import { stationReservationV1 } from '@aegisvolt/contracts';
 import { createLogger } from '@aegisvolt/logger';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GetReservation } from '../../src/application/index.ts';
 import { createHttpApp, type HttpAppDependencies } from '../../src/presentation/http/app.ts';
@@ -335,5 +335,74 @@ describe('timeouts y errores', () => {
     const body = await problem(response);
     expect(body).toMatchObject({ status: 500, code: 'INTERNAL_ERROR', detail: 'Error interno' });
     expect(JSON.stringify(body)).not.toContain('secreto');
+  });
+});
+
+function captureLogs(): {
+  logger: ReturnType<typeof createLogger>;
+  lines: Record<string, unknown>[];
+} {
+  const lines: Record<string, unknown>[] = [];
+  const logger = createLogger({
+    service: 'station-reservation-service',
+    environment: 'test',
+    version: 'test',
+    destination: {
+      write: (line: string) => lines.push(JSON.parse(line) as Record<string, unknown>),
+    },
+  });
+  return { logger, lines };
+}
+
+describe('logs estructurados (ADR-0028)', () => {
+  it('cada línea lleva los campos obligatorios, la operación y el correlation_id recibido; los rechazos, un error tipado', async () => {
+    const { logger, lines } = captureLogs();
+    const url = await start({ logger });
+
+    const response = await fetch(
+      `${url}/v1/reservations/res_00000000-0000-4000-8000-0000000000ff`,
+      {
+        headers: { 'x-correlation-id': CORRELATION_ID, authorization: 'Bearer secreto-123' },
+      },
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers.get('x-correlation-id')).toBe(CORRELATION_ID);
+
+    // Ruta inexistente: sin operación nombrada → MÉTODO /ruta.
+    await fetch(`${url}/v1/no-existe`, { headers: { 'x-correlation-id': CORRELATION_ID } });
+    await vi.waitFor(() => {
+      expect(lines.filter((line) => line.event === 'http_request')).toHaveLength(2);
+    });
+
+    const rejected = lines.find((line) => line.message === 'Operación rechazada');
+    expect(rejected).toMatchObject({
+      level: 'warn',
+      service_name: 'station-reservation-service',
+      environment: 'test',
+      correlation_id: CORRELATION_ID,
+      operation: 'GetReservation',
+      http_status: 404,
+    });
+    // Error tipado y esperado: tipo, código y mensaje, sin stack.
+    const error = (rejected?.error ?? {}) as Record<string, unknown>;
+    expect(Object.keys(error).sort()).toEqual(['code', 'message', 'type']);
+    expect(Object.values(error).every((value) => typeof value === 'string')).toBe(true);
+    const requests = lines.filter((line) => line.event === 'http_request');
+    expect(requests.map((line) => line.operation)).toEqual(['GetReservation', 'GET /v1/no-existe']);
+    expect(requests[0]).toMatchObject({ correlation_id: CORRELATION_ID, http_status: 404 });
+    for (const line of lines) {
+      for (const field of [
+        'timestamp',
+        'level',
+        'environment',
+        'service_name',
+        'correlation_id',
+        'operation',
+        'message',
+      ]) {
+        expect(line).toHaveProperty(field);
+      }
+    }
+    expect(JSON.stringify(lines)).not.toContain('secreto-123');
   });
 });

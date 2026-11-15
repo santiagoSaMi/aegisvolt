@@ -30,7 +30,7 @@ aws cognito-idp admin-create-user --user-pool-id $POOL --username operador1 \
 aws cognito-idp admin-set-user-password --user-pool-id $POOL --username operador1 --password 'Local-Passw0rd!' --permanent
 aws cognito-idp admin-add-user-to-group --user-pool-id $POOL --username operador1 --group-name fleet-operators
 
-# apps/graphql-api/.env (copiado de .env.example): COGNITO_ISSUER=http://floci:4566/$POOL,
+# apps/graphql-api/.env (copiado de .env.example): COGNITO_ISSUER=https://floci:4566/$POOL,
 # COGNITO_JWKS_URL=http://localhost:4566/$POOL/.well-known/jwks.json, COGNITO_CLIENT_ID=$CLIENT
 pnpm --filter @aegisvolt/graphql-api dev
 

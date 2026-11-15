@@ -53,6 +53,11 @@ export class SimulatedChargerAdapter implements ChargerAdapter {
         event: 'charger_fault',
         fault_class: 'PHYSICAL',
         fault_code: fault.code,
+        error: {
+          type: 'ChargerHardwareFault',
+          code: fault.code,
+          message: 'Falla física del cargador (simulada)',
+        },
         simulated: true,
         cause: `feature_flag:${FAULT_FLAG}`,
       });

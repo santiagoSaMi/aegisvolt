@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 import { sagaOrchestratorV1 } from '@aegisvolt/contracts';
 import { createLogger } from '@aegisvolt/logger';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createHttpApp } from '../../src/presentation/http/app.ts';
 import { FakeParticipants } from '../support/fake-participants.ts';
@@ -19,11 +19,15 @@ const silentLogger = createLogger({
 
 let server: Server | undefined;
 
-async function start(ctx: ReturnType<typeof createContext>, syncWaitMs = 2_000): Promise<string> {
+async function start(
+  ctx: ReturnType<typeof createContext>,
+  syncWaitMs = 2_000,
+  logger = silentLogger,
+): Promise<string> {
   const app = createHttpApp({
     useCases: ctx,
     readinessCheck: () => Promise.resolve(true),
-    logger: silentLogger,
+    logger,
     requestTimeoutMs: 5_000,
     syncWaitMs,
   });
@@ -186,5 +190,71 @@ describe('consultas', () => {
     };
     expect(list.items).toHaveLength(1);
     expect((await fetch(`${url}/v1/sagas/saga_${'0'.repeat(8)}`)).status).toBe(404);
+  });
+});
+
+function captureLogs(): {
+  logger: ReturnType<typeof createLogger>;
+  lines: Record<string, unknown>[];
+} {
+  const lines: Record<string, unknown>[] = [];
+  const logger = createLogger({
+    service: 'saga-orchestrator-service',
+    environment: 'test',
+    version: 'test',
+    destination: {
+      write: (line: string) => lines.push(JSON.parse(line) as Record<string, unknown>),
+    },
+  });
+  return { logger, lines };
+}
+
+describe('logs estructurados (ADR-0028)', () => {
+  it('cada línea lleva los campos obligatorios, la operación y el correlation_id recibido; los rechazos, un error tipado', async () => {
+    const { logger, lines } = captureLogs();
+    const url = await start(createContext(), 2_000, logger);
+
+    const response = await fetch(`${url}/v1/sagas/saga_00000000`, {
+      headers: { 'x-correlation-id': CORRELATION_ID, authorization: 'Bearer secreto-123' },
+    });
+    expect(response.status).toBe(404);
+    expect(response.headers.get('x-correlation-id')).toBe(CORRELATION_ID);
+
+    // Ruta inexistente: sin operación nombrada → MÉTODO /ruta.
+    await fetch(`${url}/v1/no-existe`, { headers: { 'x-correlation-id': CORRELATION_ID } });
+    await vi.waitFor(() => {
+      expect(lines.filter((line) => line.event === 'http_request')).toHaveLength(2);
+    });
+
+    const rejected = lines.find((line) => line.message === 'Operación rechazada');
+    expect(rejected).toMatchObject({
+      level: 'warn',
+      service_name: 'saga-orchestrator-service',
+      environment: 'test',
+      correlation_id: CORRELATION_ID,
+      operation: 'GetSaga',
+      http_status: 404,
+    });
+    // Error tipado y esperado: tipo, código y mensaje, sin stack.
+    const error = (rejected?.error ?? {}) as Record<string, unknown>;
+    expect(Object.keys(error).sort()).toEqual(['code', 'message', 'type']);
+    expect(Object.values(error).every((value) => typeof value === 'string')).toBe(true);
+    const requests = lines.filter((line) => line.event === 'http_request');
+    expect(requests.map((line) => line.operation)).toEqual(['GetSaga', 'GET /v1/no-existe']);
+    expect(requests[0]).toMatchObject({ correlation_id: CORRELATION_ID, http_status: 404 });
+    for (const line of lines) {
+      for (const field of [
+        'timestamp',
+        'level',
+        'environment',
+        'service_name',
+        'correlation_id',
+        'operation',
+        'message',
+      ]) {
+        expect(line).toHaveProperty(field);
+      }
+    }
+    expect(JSON.stringify(lines)).not.toContain('secreto-123');
   });
 });

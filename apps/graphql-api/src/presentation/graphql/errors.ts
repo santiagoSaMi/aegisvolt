@@ -102,7 +102,7 @@ export function createErrorFormatter(logger: Logger) {
     const known = map(original);
     if (known !== undefined) {
       if (known.code === 'SERVICE_UNAVAILABLE') {
-        logger.warn('Dependencia no disponible', { error: describe(original) });
+        logger.warn('Dependencia no disponible', { error: original });
       }
       return {
         ...base,
@@ -126,8 +126,7 @@ export function createErrorFormatter(logger: Logger) {
       };
     }
     logger.error('Error no controlado en GraphQL', {
-      error: describe(original),
-      stack: original instanceof Error ? original.stack : undefined,
+      error: original,
     });
     return {
       ...base,
@@ -138,8 +137,4 @@ export function createErrorFormatter(logger: Logger) {
       },
     };
   };
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }

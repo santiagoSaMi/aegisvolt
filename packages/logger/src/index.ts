@@ -1,4 +1,11 @@
-export { getLogContext, runWithLogContext, type LogContext } from './log-context.ts';
+export { toLoggedError, type LoggedError } from './error.ts';
+export {
+  getLogContext,
+  logOperation,
+  runWithLogContext,
+  setLogOperation,
+  type LogContext,
+} from './log-context.ts';
 export {
   createLogger,
   type CreateLoggerOptions,

@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import {
   HTTP_HEADERS,
   idempotentCommandHeadersSchema,
@@ -51,7 +52,7 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
   const router = Router();
 
   /** Reserva con id pre-generado por el cliente (la SAGA): el id es la clave de idempotencia. */
-  router.put(ROUTES.reservation, async (req, res) => {
+  router.put(ROUTES.reservation, logOperation('CreateReservation'), async (req, res) => {
     const { reservationId } = parseRequest(reservationParamsSchema, req.params, 'params');
     const body = parseRequest(api.holdReservationRequestSchema, req.body, 'body');
     sagaHeaders(req, body.sagaId);
@@ -60,7 +61,7 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
   });
 
   /** Reserva con cabecera `idempotency-key`: el id se deriva de la clave (`res_<clave>`). */
-  router.post(ROUTES.reservations, async (req, res) => {
+  router.post(ROUTES.reservations, logOperation('CreateReservation'), async (req, res) => {
     const headers = parseRequest(idempotentCommandHeadersSchema, req.headers, 'headers');
     const body = parseRequest(api.createReservationRequestSchema, req.body, 'body');
     const reservationId = `res_${headers[HTTP_HEADERS.idempotencyKey]}`;
@@ -70,7 +71,7 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
   });
 
   /** Reservas de una flota (desde 1.2.0), la más reciente primero. */
-  router.get(ROUTES.reservations, async (req, res) => {
+  router.get(ROUTES.reservations, logOperation('ListFleetReservations'), async (req, res) => {
     const query = parseRequest(api.listReservationsQuerySchema, req.query, 'query');
     const page = await useCases.listFleetReservations.execute(query);
     sendJson(res, 200, {
@@ -79,13 +80,13 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
     });
   });
 
-  router.get(ROUTES.reservation, async (req, res) => {
+  router.get(ROUTES.reservation, logOperation('GetReservation'), async (req, res) => {
     const { reservationId } = parseRequest(reservationParamsSchema, req.params, 'params');
     const { reservation, now } = await useCases.getReservation.execute(reservationId);
     sendJson(res, 200, toReservationView(reservation, now));
   });
 
-  router.post(ROUTES.confirmReservation, async (req, res) => {
+  router.post(ROUTES.confirmReservation, logOperation('ConfirmReservation'), async (req, res) => {
     const { reservationId } = parseRequest(reservationParamsSchema, req.params, 'params');
     parseRequest(api.confirmReservationRequestSchema, req.body ?? {}, 'body');
     const headers = sagaHeaders(req);
@@ -96,7 +97,7 @@ export function reservationRoutes(useCases: ReservationUseCases): Router {
     sendJson(res, 200, toReservationView(reservation, now));
   });
 
-  router.post(ROUTES.releaseReservation, async (req, res) => {
+  router.post(ROUTES.releaseReservation, logOperation('ReleaseReservation'), async (req, res) => {
     const { reservationId } = parseRequest(reservationParamsSchema, req.params, 'params');
     const { reason } = parseRequest(api.releaseReservationRequestSchema, req.body, 'body');
     const headers = sagaHeaders(req);

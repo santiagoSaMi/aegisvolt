@@ -53,6 +53,7 @@ export function createGracefulShutdown(options: GracefulShutdownOptions) {
   const run = async (signal: string): Promise<void> => {
     const { server, readiness, logger } = options;
     logger.info('Apagado solicitado', {
+      operation: 'Shutdown',
       signal,
       drain_delay_ms: options.drainDelayMs,
       grace_ms: options.graceMs,
@@ -63,7 +64,7 @@ export function createGracefulShutdown(options: GracefulShutdownOptions) {
     const closed = new Promise<void>((resolve) => {
       server.close((error) => {
         if (error) {
-          logger.error('Error al cerrar el servidor HTTP', { error: error.message });
+          logger.error('Error al cerrar el servidor HTTP', { operation: 'Shutdown', error });
           process.exitCode = 1;
         }
         resolve();
@@ -78,6 +79,7 @@ export function createGracefulShutdown(options: GracefulShutdownOptions) {
     idleSweep.unref();
     const force = setTimeout(() => {
       logger.warn('Plazo de apagado agotado; se cortan las conexiones abiertas', {
+        operation: 'Shutdown',
         grace_ms: options.graceMs,
       });
       server.closeAllConnections();
@@ -88,7 +90,7 @@ export function createGracefulShutdown(options: GracefulShutdownOptions) {
     clearInterval(idleSweep);
     clearTimeout(force);
     await options.onClosed?.();
-    logger.info('Servicio detenido');
+    logger.info('Servicio detenido', { operation: 'Shutdown' });
   };
 
   return (signal: string): Promise<void> => {

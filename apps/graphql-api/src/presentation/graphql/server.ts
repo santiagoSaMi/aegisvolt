@@ -9,6 +9,7 @@ import type { Logger } from '@aegisvolt/logger';
 
 import { depthLimit } from './depth-limit.ts';
 import { createErrorFormatter } from './errors.ts';
+import { logOperationPlugin } from './log-operation-plugin.ts';
 import { resolvers, type GraphqlContext } from './resolvers.ts';
 import { typeDefs } from './schema.ts';
 
@@ -38,6 +39,7 @@ export function createGraphqlServer(options: GraphqlServerOptions): ApolloServer
     validationRules: [depthLimit(options.maxDepth)],
     csrfPrevention: true,
     plugins: [
+      logOperationPlugin<GraphqlContext>(),
       ApolloServerPluginLandingPageDisabled(),
       ApolloServerPluginUsageReportingDisabled(),
       ApolloServerPluginSchemaReportingDisabled(),

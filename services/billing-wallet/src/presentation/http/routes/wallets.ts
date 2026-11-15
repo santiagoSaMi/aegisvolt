@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import { billingWalletV1 as api, fleetIdSchema, topUpIdSchema } from '@aegisvolt/contracts';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -30,26 +31,26 @@ const topUpParamsSchema = walletParamsSchema.extend({ topUpId: topUpIdSchema });
 export function walletRoutes(useCases: WalletUseCases): Router {
   const router = Router();
 
-  router.put(ROUTES.wallet, async (req, res) => {
+  router.put(ROUTES.wallet, logOperation('OpenWallet'), async (req, res) => {
     const { fleetId } = parseRequest(walletParamsSchema, req.params, 'params');
     parseRequest(api.openWalletRequestSchema, req.body ?? {}, 'body');
     const { outcome, wallet } = await useCases.openWallet.execute(fleetId);
     sendJson(res, outcome === 'CREATED' ? 201 : 200, toWalletView(wallet));
   });
 
-  router.get(ROUTES.wallet, async (req, res) => {
+  router.get(ROUTES.wallet, logOperation('GetWalletBalance'), async (req, res) => {
     const { fleetId } = parseRequest(walletParamsSchema, req.params, 'params');
     sendJson(res, 200, toWalletView(await useCases.getWalletBalance.execute(fleetId)));
   });
 
-  router.get(ROUTES.fundsCheck, async (req, res) => {
+  router.get(ROUTES.fundsCheck, logOperation('VerifyFunds'), async (req, res) => {
     const { fleetId } = parseRequest(walletParamsSchema, req.params, 'params');
     const query = parseRequest(api.fundsCheckQuerySchema, req.query, 'query');
     const check = await useCases.verifyFunds.execute({ fleetId, ...query });
     sendJson(res, 200, toFundsCheckView(check));
   });
 
-  router.get(ROUTES.walletTransactions, async (req, res) => {
+  router.get(ROUTES.walletTransactions, logOperation('GetTransactionHistory'), async (req, res) => {
     const { fleetId } = parseRequest(walletParamsSchema, req.params, 'params');
     const { limit, cursor } = parseRequest(
       api.listWalletTransactionsQuerySchema,
@@ -68,7 +69,7 @@ export function walletRoutes(useCases: WalletUseCases): Router {
   });
 
   /** Recarga administrativa: la clave idempotente es el `topUpId`. */
-  router.put(ROUTES.topUp, async (req, res) => {
+  router.put(ROUTES.topUp, logOperation('TopUpWallet'), async (req, res) => {
     const { fleetId, topUpId } = parseRequest(topUpParamsSchema, req.params, 'params');
     const { amount } = parseRequest(api.topUpRequestSchema, req.body, 'body');
     const result = await useCases.topUpWallet.execute({

@@ -139,8 +139,10 @@ Se mata el orquestador, billing vuelve a responder y un proceso nuevo retoma la 
 Todas las líneas de log de los cuatro servicios (`tests/e2e/.evidence/logs/*.log`) de una SAGA llevan el mismo `correlation_id` y su `saga_id`. Por ejemplo, la falla simulada en energy-dispatch:
 
 ```json
-{"level":"warn","service":"energy-dispatch-service","component":"simulated-charger","correlation_id":"7d40eec7-…","saga_id":"saga_43f599b7-…","event":"charger_fault","fault_class":"PHYSICAL","fault_code":"E-HW-001","simulated":true}
+{"level":"warn","service_name":"energy-dispatch-service","environment":"local","component":"simulated-charger","correlation_id":"eb4785c5-…","saga_id":"saga_016bb3fc-…","operation":"StartChargingSession","event":"charger_fault","fault_code":"E-HW-001","error":{"type":"ChargerHardwareFault","code":"E-HW-001","message":"Falla física del cargador (simulada)"},"simulated":true,"message":"Falla de hardware del cargador (simulada)"}
 ```
+
+Para reunir la traza de una SAGA en todos los procesos: `grep -h '<correlation_id>' tests/e2e/.evidence/logs/*.log`. El E2E lo verifica con `logsFor()` de `tests/e2e/src/evidence.ts`.
 
 ## 3. Demostración manual en vivo (servicios en `dev` local)
 

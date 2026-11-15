@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { collect, save } from '../src/evidence.ts';
+import { collect, logsFor, save } from '../src/evidence.ts';
 import { FLOCI_ENDPOINT, Stack, flociAvailable } from '../src/stack.ts';
 
 const available = await flociAvailable();
@@ -193,6 +193,69 @@ describe.skipIf(!available)(`SAGA Reservar y Activar Carga E2E (Floci ${FLOCI_EN
         .filter((e) => e.type === 'COMPENSATION_SUCCEEDED')
         .map((e) => e.step);
       expect(order).toEqual(['REFUND_DEBIT', 'RELEASE_RESERVATION']);
+
+      // Trazabilidad en los logs (ADR-0028): un solo correlation_id recorre los
+      // cuatro servicios, con saga_id, operation y errores tipados.
+      await expect
+        .poll(() => new Set(logsFor(view.correlationId).map((line) => line.service_name)))
+        .toEqual(
+          new Set([
+            'saga-orchestrator-service',
+            'station-reservation-service',
+            'billing-wallet-service',
+            'energy-dispatch-service',
+          ]),
+        );
+      const trace = logsFor(view.correlationId);
+      for (const line of trace) {
+        for (const field of [
+          'timestamp',
+          'level',
+          'environment',
+          'service_name',
+          'correlation_id',
+          'operation',
+          'message',
+        ]) {
+          expect(line, JSON.stringify(line)).toHaveProperty(field);
+        }
+        expect(line.environment).toBe('local');
+      }
+      expect(
+        trace
+          .filter((line) => line.service_name !== 'saga-orchestrator-service')
+          .every((line) => line.saga_id === view.sagaId),
+      ).toBe(true);
+      const stepFailed = trace.find(
+        (line) => line.service_name === 'saga-orchestrator-service' && line.event === 'STEP_FAILED',
+      );
+      expect(stepFailed).toMatchObject({
+        operation: 'ReserveAndActivateCharging',
+        saga_id: view.sagaId,
+      });
+      expect(stepFailed?.error).toMatchObject({
+        type: 'SagaStepFailure',
+        code: 'CHARGER_HARDWARE_FAULT',
+      });
+      const fault = trace.find(
+        (line) => line.service_name === 'energy-dispatch-service' && line.event === 'charger_fault',
+      );
+      expect(fault).toMatchObject({ operation: 'StartChargingSession' });
+      expect(fault?.error).toMatchObject({ type: 'ChargerHardwareFault', code: 'E-HW-001' });
+      expect(trace).toContainEqual(
+        expect.objectContaining({
+          service_name: 'billing-wallet-service',
+          operation: 'RefundWallet',
+          event: 'http_request',
+        }),
+      );
+      expect(trace).toContainEqual(
+        expect.objectContaining({
+          service_name: 'station-reservation-service',
+          operation: 'ReleaseReservation',
+          event: 'http_request',
+        }),
+      );
     } finally {
       await simulateFault(false);
     }

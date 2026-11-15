@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 import { createLogger } from '@aegisvolt/logger';
 import type { ApolloServer } from '@apollo/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   FlagSnapshotCache,
@@ -143,5 +143,56 @@ describe('probes', () => {
     expect((await fetch(`${url}/health/ready`)).status).toBe(200);
     ready = false;
     expect((await fetch(`${url}/health/ready`)).status).toBe(503);
+  });
+});
+
+describe('logs estructurados (ADR-0028)', () => {
+  const CORRELATION = '6c1f0b8e-2d3a-4b5c-9d7e-0123456789ab';
+  const requestsOf = (correlationId: string) =>
+    logLines.filter(
+      (line) => line.event === 'http_request' && line.correlation_id === correlationId,
+    );
+
+  it('la operación GraphQL (con nombre o el campo raíz si es anónima) y el correlation_id quedan en el log', async () => {
+    const named = await post(
+      { query: 'query Flags { featureFlags { environment } }', operationName: 'Flags' },
+      { authorization: 'Bearer valid-op', 'x-correlation-id': CORRELATION },
+    );
+    expect(named.status).toBe(200);
+    const anonymousId = '7d2e1c9f-3e4b-4c6d-8e9f-123456789abc';
+    await post(
+      { query: '{ featureFlags { environment } }' },
+      { authorization: 'Bearer valid-op', 'x-correlation-id': anonymousId },
+    );
+
+    await vi.waitFor(() => {
+      expect(requestsOf(CORRELATION)).toHaveLength(1);
+      expect(requestsOf(anonymousId)).toHaveLength(1);
+    });
+    expect(requestsOf(CORRELATION)[0]).toMatchObject({
+      service_name: 'graphql-api',
+      environment: 'test',
+      operation: 'query.Flags',
+      http_status: 200,
+    });
+    expect(requestsOf(anonymousId)[0]).toMatchObject({ operation: 'query.featureFlags' });
+  });
+
+  it('un token rechazado se registra por su motivo, nunca por su valor', async () => {
+    const correlationId = '8e3f2d0a-4f5c-4d7e-9f0a-23456789abcd';
+    await post(
+      { query: '{ featureFlags { environment } }' },
+      { authorization: 'Bearer tok-secreto-xyz', 'x-correlation-id': correlationId },
+    );
+
+    await vi.waitFor(() => {
+      expect(requestsOf(correlationId)).toHaveLength(1);
+    });
+    const rejected = logLines.find(
+      (line) => line.message === 'Token rechazado' && line.correlation_id === correlationId,
+    );
+    expect(rejected).toMatchObject({ level: 'warn', event: 'auth_rejected' });
+    expect(JSON.stringify(logLines)).not.toContain('tok-secreto-xyz');
+    expect(JSON.stringify(logLines)).not.toContain('valid-op');
   });
 });

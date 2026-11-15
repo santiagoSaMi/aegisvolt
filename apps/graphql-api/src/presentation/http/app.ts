@@ -1,6 +1,6 @@
 import { expressMiddleware } from '@as-integrations/express5';
 import type { ApolloServer } from '@apollo/server';
-import type { Logger } from '@aegisvolt/logger';
+import { logOperation, type Logger } from '@aegisvolt/logger';
 import express, { Router, type Express, type Request } from 'express';
 
 import type { Principal, TokenVerifier } from '../../application/index.ts';
@@ -48,10 +48,10 @@ async function principalOf(
 
 function healthRoutes(readinessCheck: () => Promise<boolean>): Router {
   const router = Router();
-  router.get('/health/live', (_req, res) => {
+  router.get('/health/live', logOperation('HealthLive'), (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
-  router.get('/health/ready', async (_req, res) => {
+  router.get('/health/ready', logOperation('HealthReady'), async (_req, res) => {
     const ready = await readinessCheck().catch(() => false);
     res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready' });
   });

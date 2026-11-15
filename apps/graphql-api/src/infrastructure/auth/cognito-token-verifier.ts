@@ -4,7 +4,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { UnauthorizedError, type Principal, type TokenVerifier } from '../../application/index.ts';
 
 export interface CognitoTokenVerifierOptions {
-  /** `iss` esperado (en Floci: `http://floci:4566/<poolId>`). */
+  /** `iss` esperado (en Floci con TLS: `https://floci:4566/<poolId>`; ADR-0029). */
   readonly issuer: string;
   /** App client del User Pool del ambiente: `aud` del ID token. */
   readonly clientId: string;

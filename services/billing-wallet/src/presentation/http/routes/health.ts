@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import { Router } from 'express';
 
 import { sendJson } from '../problem.ts';
@@ -10,11 +11,11 @@ import { sendJson } from '../problem.ts';
 export function healthRoutes(readinessCheck: () => Promise<boolean>): Router {
   const router = Router();
 
-  router.get('/health/live', (_req, res) => {
+  router.get('/health/live', logOperation('HealthLive'), (_req, res) => {
     sendJson(res, 200, { status: 'ok' });
   });
 
-  router.get('/health/ready', async (_req, res) => {
+  router.get('/health/ready', logOperation('HealthReady'), async (_req, res) => {
     const ready = await readinessCheck().catch(() => false);
     sendJson(res, ready ? 200 : 503, { status: ready ? 'ready' : 'not_ready' });
   });

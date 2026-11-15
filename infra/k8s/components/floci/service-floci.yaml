@@ -1,0 +1,29 @@
+# Acceso de los pods a Floci (ADR-0012, L-07): los pods de k3s no resuelven el
+# hostname `floci`, así que un Service SIN selector apunta a la IP de Floci en la
+# red Docker `aegisvolt-floci`. La IP real la sustituye el script de despliegue
+# local (placeholder FLOCI_IP) hasta fijarla en el compose (fase de K8s).
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci
+  namespace: logging
+spec:
+  ports:
+    - name: aws
+      port: 4566
+      targetPort: 4566
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: floci
+  namespace: logging
+  labels:
+    kubernetes.io/service-name: floci
+addressType: IPv4
+ports:
+  - name: aws
+    port: 4566
+endpoints:
+  - addresses:
+      - FLOCI_IP

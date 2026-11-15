@@ -385,7 +385,8 @@ export class Stack {
           ENERGY_DISPATCH_URL: this.url('energy-dispatch'),
           SAGA_ORCHESTRATOR_URL: this.url('saga-orchestrator'),
           // El `iss` de Floci usa el hostname `floci`; el JWKS se lee por localhost.
-          COGNITO_ISSUER: `http://floci:4566/${this.cognito.poolId}`,
+          // Con FLOCI_TLS_ENABLED, Cognito emite `iss` con https (como en AWS real).
+          COGNITO_ISSUER: `https://floci:4566/${this.cognito.poolId}`,
           COGNITO_JWKS_URL: `${FLOCI_ENDPOINT}/${this.cognito.poolId}/.well-known/jwks.json`,
           COGNITO_CLIENT_ID: this.cognito.clientId,
           SAGA_START_TIMEOUT_MS: '20000',

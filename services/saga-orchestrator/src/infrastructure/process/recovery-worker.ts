@@ -43,6 +43,7 @@ export class RecoveryWorker {
       .then((report) => {
         if (report.recovered.length > 0) {
           this.logger.info('SAGAs recuperadas', {
+            operation: 'RecoverSagas',
             event: 'saga_recovery',
             examined: report.examined,
             recovered: report.recovered,
@@ -52,8 +53,9 @@ export class RecoveryWorker {
       })
       .catch((error: unknown) => {
         this.logger.error('Fallo en la recuperación de SAGAs', {
+          operation: 'RecoverSagas',
           event: 'saga_recovery_failed',
-          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          error,
         });
       })
       .finally(() => {

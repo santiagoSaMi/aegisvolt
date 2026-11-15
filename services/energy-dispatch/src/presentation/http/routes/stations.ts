@@ -1,3 +1,4 @@
+import { logOperation } from '@aegisvolt/logger';
 import { energyDispatchV1 as api, connectorIdSchema, stationIdSchema } from '@aegisvolt/contracts';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -20,7 +21,7 @@ const chargerParamsSchema = stationParamsSchema.extend({ connectorId: connectorI
 export function stationRoutes(useCases: StationUseCases): Router {
   const router = Router();
 
-  router.get(ROUTES.stationSessions, async (req, res) => {
+  router.get(ROUTES.stationSessions, logOperation('ListStationSessions'), async (req, res) => {
     const { stationId } = parseRequest(stationParamsSchema, req.params, 'params');
     const query = parseRequest(api.listStationSessionsQuerySchema, req.query, 'query');
     const page = await useCases.listStationSessions.execute({ stationId, ...query });
@@ -30,7 +31,7 @@ export function stationRoutes(useCases: StationUseCases): Router {
     });
   });
 
-  router.get(ROUTES.chargerStatus, async (req, res) => {
+  router.get(ROUTES.chargerStatus, logOperation('GetChargerStatus'), async (req, res) => {
     const params = parseRequest(chargerParamsSchema, req.params, 'params');
     sendJson(res, 200, toChargerStatusView(await useCases.getChargerStatus.execute(params)));
   });
