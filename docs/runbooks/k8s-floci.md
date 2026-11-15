@@ -80,6 +80,15 @@ kubectl -n aegisvolt rollout restart deploy/graphql-api
 
 Para **borrar el clúster** (destructivo; solo con autorización): `aws eks delete-cluster --name aegisvolt-dev`. Luego, `docker rm -f floci-aws-eks-aegisvolt-dev` y `docker volume rm floci-aws-eks-aegisvolt-dev`, porque Floci conserva el contenedor y el volumen de k3s. Los datos de DynamoDB y Cognito del ambiente viven en Floci y no se borran con el clúster.
 
+### Canary de graphql-api
+
+`k8s-deploy.sh` también instala la plataforma de clúster: Argo Rollouts v1.10.1 y Traefik v3.7.16, con los manifiestos oficiales verificados por sha256 (`scripts/k8s/vendor-platform.sh`).
+
+- graphql-api se despliega como `Rollout` y el script espera a que esté `Healthy`.
+- Con `--no-wait-canary` no se espera.
+- Promoción, rollback y evidencias: [canary-demo.md](canary-demo.md).
+- Si el clúster no arranca tras reiniciar Docker, ver [L-10](../limitations.md#l-10--el-clúster-k3s-de-floci-no-arranca-si-su-contenedor-cambia-de-ip).
+
 ## 4. Troubleshooting
 
 | Síntoma | Causa probable | Qué hacer |

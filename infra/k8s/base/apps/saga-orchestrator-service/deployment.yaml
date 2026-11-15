@@ -22,6 +22,8 @@ spec:
   template:
     metadata:
       labels:
+        # Versión desplegada (la reemplaza el despliegue por la etiqueta de la imagen).
+        version: unversioned
         app.kubernetes.io/name: saga-orchestrator-service
         app.kubernetes.io/part-of: aegisvolt
         app.kubernetes.io/component: service
@@ -49,6 +51,11 @@ spec:
             - configMapRef:
                 name: saga-orchestrator-service-config
           env:
+            # Versión en logs (campo `version`) y en `x-service-version`: la etiqueta del pod.
+            - name: SERVICE_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['version']
             # Límite de heap acorde al límite de memoria del contenedor.
             - name: NODE_OPTIONS
               value: --max-old-space-size=192

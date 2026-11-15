@@ -20,6 +20,8 @@ spec:
   template:
     metadata:
       labels:
+        # Versión desplegada (la reemplaza el despliegue por la etiqueta de la imagen).
+        version: unversioned
         app.kubernetes.io/name: web
         app.kubernetes.io/part-of: aegisvolt
         app.kubernetes.io/component: frontend

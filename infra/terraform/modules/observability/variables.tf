@@ -61,3 +61,9 @@ variable "alarm_actions" {
   type        = list(string)
   default     = []
 }
+
+variable "bff_service" {
+  description = "Servicio BFF (GraphQL) cuyas operaciones se miden por versión para el canary."
+  type        = string
+  default     = "graphql-api"
+}

@@ -7,6 +7,8 @@ resources:
 components:
   # Local: AWS = Floci (endpoint, credenciales ficticias, logs). En AWS real se quita.
   - ../../components/floci
+  # Canary de graphql-api (Argo Rollouts + Traefik); requiere infra/k8s/platform.
+  - ../../components/canary
 configMapGenerator:
   - name: station-reservation-service-config
     namespace: aegisvolt
@@ -55,4 +57,12 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/env/1/value
+        value: test
+  # Métricas del análisis canary en el namespace AegisVolt/test.
+  - target:
+      kind: AnalysisTemplate
+      name: graphql-api-canary-health
+    patch: |-
+      - op: replace
+        path: /spec/args/1/value
         value: test

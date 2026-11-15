@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Despliega AegisVolt en el clúster EKS (k3s) de Floci de un ambiente (ADR-0012, ADR-0031).
 #
-# Uso: scripts/floci/k8s-deploy.sh <dev|test|prod> [--tag <tag>] [--no-smoke]
-#   --tag       usa imágenes ya construidas (aegisvolt/<app>:<tag>) en lugar de construir
-#   --no-smoke  no ejecuta la prueba de humo final
+# Uso: scripts/floci/k8s-deploy.sh <dev|test|prod> [--tag <tag>] [--no-smoke] [--no-wait-canary]
+#   --tag             usa imágenes ya construidas (aegisvolt/<app>:<tag>) en lugar de construir
+#   --no-smoke        no ejecuta la prueba de humo final
+#   --no-wait-canary  no espera a que el canary de graphql-api termine (Argo Rollouts)
 #
 # Pasos (idempotentes): imágenes con tag inmutable → ECR de Floci → clúster aegisvolt-<env>
 # → tablas y Cognito del ambiente → kustomize (overlay + imágenes del commit) → rollout
@@ -14,11 +15,12 @@ source "$(dirname "$0")/lib.sh"
 
 ENV="${1:-}"; shift || true
 [[ "$ENV" =~ ^(dev|test|prod)$ ]] || die "Uso: $0 <dev|test|prod> [--tag <tag>] [--no-smoke]"
-TAG=""; SMOKE=true
+TAG=""; SMOKE=true; WAIT_CANARY=true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tag) shift; TAG="${1:?--tag requiere un valor}" ;;
     --no-smoke) SMOKE=false ;;
+    --no-wait-canary) WAIT_CANARY=false ;;
     *) die "Opción desconocida: $1" ;;
   esac
   shift
@@ -93,6 +95,15 @@ k() { (set -a; source "$KUBE_CREDS"; set +a; KUBECONFIG="${STATE}/kubeconfig" ku
 for _ in $(seq 1 60); do k get serviceaccount default >/dev/null 2>&1 && break; sleep 2; done
 log_ok "Clúster ${CLUSTER} ACTIVE ($(k version -o json | jq -r .serverVersion.gitVersion)); kubeconfig: ${STATE}/kubeconfig"
 
+# --- 3b. Plataforma de despliegue progresivo: Argo Rollouts + Traefik (ADR-0032) --------
+FLOCI_IP="$(docker inspect -f '{{(index .NetworkSettings.Networks "aegisvolt-floci").IPAddress}}' "$FLOCI_CONTAINER")"
+"${REPO_ROOT}/scripts/k8s/vendor-platform.sh" >/dev/null
+kubectl kustomize "${REPO_ROOT}/infra/k8s/platform/local" | sed "s/FLOCI_IP/${FLOCI_IP}/g" > "${STATE}/platform.yaml"
+k apply --server-side --force-conflicts -f "${STATE}/platform.yaml" >/dev/null
+k -n argo-rollouts rollout status deploy/argo-rollouts --timeout=300s >/dev/null
+k -n traefik rollout status deploy/traefik --timeout=300s >/dev/null
+log_ok "Plataforma: Argo Rollouts v1.10.1 y Traefik v3.7.16"
+
 # --- 4. Datos e identidad del ambiente ---------------------------------------------------
 "${REPO_ROOT}/scripts/floci/bootstrap-env.sh" "$ENV" >/dev/null
 IDENTITY="${FLOCI_TMP_DIR}/identity-${ENV}.env"
@@ -101,7 +112,6 @@ source "$IDENTITY"
 log_ok "Tablas y Cognito de ${ENV} (pool ${COGNITO_POOL_ID})"
 
 # --- 5. Manifiestos: overlay + imágenes del commit + IP de Floci -------------------------
-FLOCI_IP="$(docker inspect -f '{{(index .NetworkSettings.Networks "aegisvolt-floci").IPAddress}}' "$FLOCI_CONTAINER")"
 RENDER="${STATE}/kustomize"
 mkdir -p "$RENDER"
 {
@@ -109,6 +119,12 @@ mkdir -p "$RENDER"
   echo "kind: Kustomization"
   echo "resources:"
   echo "  - $(realpath --relative-to="$RENDER" "${REPO_ROOT}/infra/k8s/overlays/${ENV}")"
+  # Versión desplegada en todos los recursos y pods (SERVICE_VERSION, x-service-version,
+  # métricas por versión y argumento del análisis canary).
+  echo "labels:"
+  echo "  - pairs:"
+  echo "      version: ${TAG}"
+  echo "    includeTemplates: true"
   echo "images:"
   for app in "${APPS[@]}"; do
     printf '  - name: aegisvolt/%s\n    newName: %s/aegisvolt/%s\n    newTag: %s\n' "$app" "$REGISTRY" "$app" "$TAG"
@@ -125,7 +141,7 @@ k -n logging create configmap floci-ca --from-file=floci-root-ca.crt="$FLOCI_CA"
 k apply -f "${STATE}/manifests.yaml" >/dev/null
 log_ok "Manifiestos aplicados (${STATE}/manifests.yaml)"
 
-for app in station-reservation-service billing-wallet-service energy-dispatch-service saga-orchestrator-service graphql-api web; do
+for app in station-reservation-service billing-wallet-service energy-dispatch-service saga-orchestrator-service web; do
   if ! k -n aegisvolt rollout status "deploy/${app}" --timeout=300s >/dev/null; then
     k -n aegisvolt get pods -o wide >&2
     k -n aegisvolt describe "deploy/${app}" | tail -n 20 >&2
@@ -133,6 +149,15 @@ for app in station-reservation-service billing-wallet-service energy-dispatch-se
   fi
 done
 k -n logging rollout status ds/fluent-bit --timeout=300s >/dev/null
+# graphql-api: Rollout de Argo (canary con análisis). Healthy = versión estable servida.
+if $WAIT_CANARY; then
+  for _ in $(seq 1 120); do
+    PHASE="$(k -n aegisvolt get rollout graphql-api -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    [[ "$PHASE" == Healthy || "$PHASE" == Degraded ]] && break
+    sleep 10
+  done
+  [[ "$PHASE" == Healthy ]] || die "Rollout de graphql-api en ${PHASE:-desconocido} (canary abortado o sin terminar): kubectl -n aegisvolt describe rollout graphql-api"
+fi
 log_ok "Rollouts completos en ${CLUSTER}"
 k -n aegisvolt get deploy,svc,pods -o wide
 

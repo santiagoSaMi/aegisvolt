@@ -39,7 +39,7 @@ export function createGraphqlServer(options: GraphqlServerOptions): ApolloServer
     validationRules: [depthLimit(options.maxDepth)],
     csrfPrevention: true,
     plugins: [
-      logOperationPlugin<GraphqlContext>(),
+      logOperationPlugin<GraphqlContext>(options.logger),
       ApolloServerPluginLandingPageDisabled(),
       ApolloServerPluginUsageReportingDisabled(),
       ApolloServerPluginSchemaReportingDisabled(),

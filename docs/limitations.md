@@ -61,11 +61,23 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 ## L-04 · Canary con métricas de CloudWatch
 
 - **Requisito:** §3.3 — health checks y métricas de error en CloudWatch antes de promover del 20 % al 100 %.
-- **Estado** (verificado el 2026-11-12 y de nuevo con `scripts/floci/cloudwatch-probe.sh` el 2026-11-14):
+- **Estado de CloudWatch en Floci** (verificado el 2026-11-12 y de nuevo con `scripts/floci/cloudwatch-probe.sh` el 2026-11-14):
   - Funcionan `put-metric-data`, `get-metric-statistics`, `get-metric-data` con `MetricStat` y los metric filters de Logs (un log de error genera la métrica).
   - Una expresión de *metric math* (`100*e/r`) **no devolvió resultado**, como anticipaba la documentación.
   - Las alarmas de **una sola métrica** sí se evalúan: pasan a `ALARM` con datos de un metric filter.
-- **Propuesta:** el análisis canary calcula la tasa de error en un Job a partir de CloudWatch Logs ([ADR-0013](adr/0013-canary-argo-rollouts-analisis-cloudwatch.md)).
+- **Lo que sí se verificó con el canary** (2026-11-15, Argo Rollouts v1.10.1, [ADR-0032](adr/0032-canary-argo-rollouts-traefik-cloudwatch.md)):
+  - El proveedor `cloudWatch` del núcleo de Argo lee `GetMetricData` del CloudWatch de Floci (`AWS_ENDPOINT_URL` en el controlador).
+  - Las mediciones usan métricas reales: logs de graphql-api → Fluent Bit → metric filters de Terraform → métricas por `Version`.
+  - Una promoción y un abort reales dependieron de esas mediciones ([runbook](runbooks/canary-demo.md)).
+- **Diferencias y pendientes en AWS real:**
+  - La tasa se calcula en la condición del análisis con dos series, porque Floci no tiene *metric math*. En AWS podría usarse una expresión `errors/ops`, pero no hace falta.
+  - **Pendiente de validar en AWS real:**
+    - credenciales del controlador por IRSA/Pod Identity con `cloudwatch:GetMetricData` (en local, Secret ficticio);
+    - la latencia real de los metric filters, que determina el `initialDelay` de 60 s;
+    - que CloudWatch devuelva las dos series en el orden de las consultas. La condición comprueba el `Id` y, si cambia el orden, la medición falla en vez de calcular mal.
+  - Floci no tiene ALB ni el AWS Load Balancer Controller: el reparto lo hace Traefik dentro del clúster, igual que se haría en EKS detrás de un NLB.
+- **Alcance del canary:** solo graphql-api (tráfico norte-sur). Los servicios internos se llaman este-oeste por `ClusterIP`; repartirlos por peso exige una malla de servicios (ADR-0032, alternativa 4).
+- **Herramientas:** no se instaló el plugin `kubectl-argo-rollouts`. Se opera con `kubectl` sobre los recursos (`rollout`, `analysisrun`, `traefikservice`) y `kubectl patch` para abortar o promover.
 
 ## L-05 · API Gateway HTTP (v2) sin verificar
 
@@ -124,3 +136,20 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
   - Floci corre con `FLOCI_TLS_ENABLED=true`: HTTP y HTTPS en el mismo puerto. Fluent Bit valida el certificado con la CA local de Floci (`tls.verify: on`).
   - La recolección completa (pods → Fluent Bit → log groups → métricas → alarma) se verifica con `scripts/floci/logging-k8s-verify.sh`.
 - **En AWS real** funcionan `stats`, EMF y *metric math*; el diseño no depende de ellos.
+
+## L-10 · El clúster k3s de Floci no arranca si su contenedor cambia de IP
+
+- **Requisito:** §2.2 — clúster por ambiente operable de forma repetible.
+- **Comportamiento observado** (Floci 2.4.0, k3s v1.36.0+k3s1, 2026-11-15):
+  - Floci crea el contenedor `floci-aws-eks-<cluster>` con `node-ip` fijo: la IP que tenía al crearse.
+  - Tras reiniciar Docker o el contenedor, la red puede asignarle otra IP.
+  - k3s termina con `unable to initialize network policy controller ... failed to find interface with specified node ip` y el API server no vuelve.
+- **Recuperación verificada (no destructiva):** reconectar el contenedor a la red de Floci con su IP original y arrancarlo. Conserva el estado del clúster (pods, Rollouts, CRDs).
+  ```bash
+  docker inspect floci-aws-eks-aegisvolt-dev --format '{{json .Config.Cmd}}'   # o los logs: node-ip original
+  docker network disconnect aegisvolt-floci floci-aws-eks-aegisvolt-dev
+  docker network connect --ip <ip-original> aegisvolt-floci floci-aws-eks-aegisvolt-dev
+  docker start floci-aws-eks-aegisvolt-dev
+  ```
+- **Alternativa:** borrar y recrear el clúster con `scripts/floci/k8s-deploy.sh <env>`. Es destructiva y requiere autorización.
+- **En EKS real** no aplica: el plano de control es administrado y los nodos se reemplazan por el node group.

@@ -1,6 +1,6 @@
 # ADR-0013: Canary con Argo Rollouts (por réplicas) y análisis mediante Job contra CloudWatch
 
-- **Estado:** Aceptado
+- **Estado:** Reemplazado por [ADR-0032](0032-canary-argo-rollouts-traefik-cloudwatch.md) (2026-11-15): la verificación contra el clúster mostró que el proveedor CloudWatch de Argo está en el núcleo y funciona con Floci, y el reparto pasa a ser por peso con Traefik
 - **Fecha:** 2026-11-12
 
 ## Contexto

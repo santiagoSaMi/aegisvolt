@@ -59,6 +59,7 @@ async function bootstrap(): Promise<void> {
     tokens: new CognitoTokenVerifier(config.cognito),
     readinessCheck: readiness.check,
     logger,
+    serviceVersion: config.serviceVersion,
   });
 
   const server = app.listen(config.port, (error?: Error) => {

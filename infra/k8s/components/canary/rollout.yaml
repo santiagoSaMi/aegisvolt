@@ -1,0 +1,54 @@
+# graphql-api: el BFF recibe el tráfico externo (norte-sur), que Traefik puede
+# repartir por peso. Los servicios internos se llaman este-oeste por ClusterIP:
+# repartirlos exigiría una malla de servicios (ADR-0032).
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: graphql-api
+  namespace: aegisvolt
+  labels:
+    app.kubernetes.io/name: graphql-api
+    app.kubernetes.io/part-of: aegisvolt
+    # Versión que se despliega (la fija el despliegue): argumento del análisis.
+    version: unversioned
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: graphql-api
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: graphql-api
+  strategy:
+    canary:
+      stableService: graphql-api
+      canaryService: graphql-api-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: graphql-api-split
+      # Tras abortar o promover, la versión anterior se mantiene 30 s (en vuelo).
+      abortScaleDownDelaySeconds: 30
+      scaleDownDelaySeconds: 30
+      steps:
+        # 80 % estable / 20 % canary, y análisis antes de seguir.
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: graphql-api-canary-health
+            args:
+              - name: canary-version
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['version']
+        # Promoción gradual: 50 % con un segundo análisis; luego 100 %.
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: graphql-api-canary-health
+            args:
+              - name: canary-version
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['version']

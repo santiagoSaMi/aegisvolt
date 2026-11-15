@@ -1,0 +1,18 @@
+# Service de la versión canary. Argo Rollouts añade a este Service y al estable
+# (`graphql-api`, de la base) el selector rollouts-pod-template-hash de cada versión.
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-api-canary
+  namespace: aegisvolt
+  labels:
+    app.kubernetes.io/name: graphql-api
+    app.kubernetes.io/part-of: aegisvolt
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: graphql-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
