@@ -7,7 +7,7 @@ Contratos públicos entre las unidades desplegables de AegisVolt. La **fuente de
 | station-reservation | `stationReservationV1` | 1.2.0 | station-reservation-service | saga-orchestrator (comandos), graphql-api (lecturas) |
 | billing-wallet | `billingWalletV1` | 1.1.0 | billing-wallet-service | saga-orchestrator (débito y reembolso), graphql-api (billetera y recargas) |
 | energy-dispatch | `energyDispatchV1` | 1.1.0 | energy-dispatch-service | saga-orchestrator (activación y aborto), graphql-api (sesiones, parada, cargadores y telemetría) |
-| saga-orchestrator | `sagaOrchestratorV1` | 1.1.0 | saga-orchestrator-service | graphql-api |
+| saga-orchestrator | `sagaOrchestratorV1` | 1.2.0 | saga-orchestrator-service | graphql-api, Prefect (auditoría, `GET /v1/audit/sagas`) |
 | feature-flags (datos + módulo de flags del graphql-api) | `featureFlagsV1` | 1.1.0 | graphql-api (único escritor) | los tres servicios (lectura) |
 
 Historial de cambios: [`packages/contracts/CHANGELOG.md`](../../packages/contracts/CHANGELOG.md).

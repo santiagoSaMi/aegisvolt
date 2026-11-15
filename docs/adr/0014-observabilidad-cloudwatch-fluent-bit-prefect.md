@@ -1,6 +1,6 @@
 # ADR-0014: Observabilidad con logs JSON en stdout, Fluent Bit hacia CloudWatch y Prefect como plano de auditoría
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado; la lectura directa de DynamoDB por Prefect queda reemplazada por [ADR-0030](0030-prefect-auditoria-solo-lectura-por-apis.md) (auditoría por las APIs de cada servicio)
 - **Fecha:** 2026-11-12
 
 ## Contexto

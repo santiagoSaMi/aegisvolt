@@ -6,7 +6,7 @@ import {
   type SagaTransaction,
 } from '../../domain/index.ts';
 import { SagaNotFoundError } from '../errors.ts';
-import type { SagaRepository } from '../ports/repositories.ts';
+import type { SagaRepository, StatusPage } from '../ports/repositories.ts';
 
 export class GetSaga {
   private readonly sagas: SagaRepository;
@@ -56,6 +56,35 @@ export class ListFleetSagas {
     return this.sagas.listByFleet(FleetId.parse(query.fleetId), {
       status: query.status,
       limit: query.limit,
+    });
+  }
+}
+
+/**
+ * Consulta de auditoría (ADR-0030): SAGAs por estado en todas las flotas, para
+ * que Prefect detecte las detenidas o inconsistentes SIN leer la tabla del
+ * orquestador. Solo lectura: nunca reanuda ni compensa (eso es del orquestador).
+ */
+export class ListSagasByStatus {
+  private readonly sagas: SagaRepository;
+
+  constructor(deps: { sagas: SagaRepository }) {
+    this.sagas = deps.sagas;
+  }
+
+  execute(query: {
+    status: SagaStatus;
+    updatedAfter?: string | undefined;
+    updatedBefore?: string | undefined;
+    limit: number;
+    cursor?: string | undefined;
+  }): Promise<StatusPage> {
+    return this.sagas.listByStatus({
+      status: query.status,
+      updatedAfter: query.updatedAfter === undefined ? undefined : new Date(query.updatedAfter),
+      updatedBefore: query.updatedBefore === undefined ? undefined : new Date(query.updatedBefore),
+      limit: query.limit,
+      cursor: query.cursor,
     });
   }
 }

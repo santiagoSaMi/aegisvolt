@@ -1,0 +1,52 @@
+# Auditoría contra el stack de demostración (`pnpm --filter @aegisvolt/e2e-tests demo:web`, puertos 24100–24104).
+# Uso: AEGISVOLT_AUDIT_CONFIG=config/demo.toml.
+# Sin credenciales de tablas: Prefect solo usa las APIs de los servicios (ADR-0030).
+
+[audit]
+lookback_hours = 24
+# Flotas a revisar además de las que aparecen en las SAGAs de la ventana.
+fleets = []
+page_limit = 50
+max_pages = 20
+
+[thresholds]
+# Justificación en ADR-0030 (configuración del orquestador: plazo 60 s, recuperación 15 s).
+stale_after_seconds = 600
+settle_seconds = 120
+compensation_retry_grace_seconds = 300
+session_end_grace_seconds = 300
+
+[http]
+timeout_seconds = 3.0
+
+[cloudwatch]
+# Métricas AegisVolt/Audit y comprobación de log groups. Solo Floci local.
+enabled = true
+endpoint_url = "http://localhost:4566"
+region = "us-east-1"
+namespace = "AegisVolt/Audit"
+
+[environments.dev]
+saga_orchestrator = "http://127.0.0.1:24100"
+station_reservation = "http://127.0.0.1:24101"
+billing_wallet = "http://127.0.0.1:24102"
+energy_dispatch = "http://127.0.0.1:24103"
+graphql_api = "http://127.0.0.1:24104"
+
+# test y prod: en Kubernetes serían los Services internos de cada clúster
+# (http://<servicio>.aegisvolt.svc:8080). En local no hay despliegue: el monitor
+# de salud los reporta DOWN, que es el estado real. Puertos sin uso (fuera del rango
+# efímero y del registry de ECR de Floci, 5100).
+[environments.test]
+saga_orchestrator = "http://127.0.0.1:21100"
+station_reservation = "http://127.0.0.1:21101"
+billing_wallet = "http://127.0.0.1:21102"
+energy_dispatch = "http://127.0.0.1:21103"
+graphql_api = "http://127.0.0.1:21104"
+
+[environments.prod]
+saga_orchestrator = "http://127.0.0.1:22100"
+station_reservation = "http://127.0.0.1:22101"
+billing_wallet = "http://127.0.0.1:22102"
+energy_dispatch = "http://127.0.0.1:22103"
+graphql_api = "http://127.0.0.1:22104"

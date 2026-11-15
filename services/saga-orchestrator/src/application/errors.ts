@@ -33,6 +33,11 @@ export class SagaAlreadyExistsError extends ApplicationError {
   readonly code = 'CONCURRENT_MODIFICATION';
 }
 
+/** El cursor de paginación no es válido (manipulado o de otra consulta). */
+export class InvalidCursorError extends ApplicationError {
+  readonly code = 'VALIDATION_ERROR';
+}
+
 /** DynamoDB no respondió a tiempo o rechazó la petición por capacidad. */
 export class DependencyUnavailableError extends ApplicationError {
   readonly code = 'SERVICE_UNAVAILABLE';

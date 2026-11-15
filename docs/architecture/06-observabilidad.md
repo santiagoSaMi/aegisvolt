@@ -88,14 +88,15 @@ aws logs filter-log-events --log-group-name $G/saga-orchestrator-service \
 
 ## Prefect
 
-**Despliegue:** `prefect server start` y un worker de tipo *process*, en contenedores en `infra/local/prefect/`, con **Prefect 3.x** (última verificada: 3.9.2). Es un plano de observabilidad **transversal** que supervisa los tres ambientes, como pide §2.5. Su base de datos de metadatos es interna a Prefect, no forma parte de los datos de AegisVolt y no contradice "uso exclusivo de DynamoDB" (P-18).
+Decisión vigente: [ADR-0030](../adr/0030-prefect-auditoria-solo-lectura-por-apis.md), que reemplaza la lectura directa de DynamoDB de ADR-0014. Proyecto en [`prefect/`](../../prefect/README.md), con **Prefect 3.9.0**, Prefect Server local y su dashboard. Es un plano de observabilidad **transversal**: su base de metadatos es interna a Prefect y no son datos de AegisVolt (P-18).
 
-| Flow | Programación | Tasks | Salida |
+| Flow | Programación (`serve`) | Fuente (solo GET a las APIs) | Salida |
 | --- | --- | --- | --- |
-| `environment_health` | cada 5 min, parámetro `envs=["dev","test","prod"]` | Por ambiente: `/health/ready` de cada app (a través de la API `/ops`), `DescribeTable` de las 5 tablas, lectura de flags, existencia de los log groups | *Table artifact* con el estado por ambiente; el flow falla si algún ambiente está degradado |
-| `saga_consistency_audit` | cada 10 min | Por ambiente, de solo lectura: (1) SAGAs no terminales con más de 5 min (**huérfanas**); (2) `COMPENSATED` → reserva `RELEASED`/`VOIDED`, débito `REFUNDED`/`REJECTED`/`VOIDED`, sesión no `ACTIVE`; (3) `COMPLETED` → reserva `CONFIRMED`, débito `DEBITED`, sesión `ACTIVE`/`COMPLETED`; (4) *holds* vencidos sin SAGA; (5) `COMPENSATION_FAILED` sin reintento programado (requiere reintento controlado) | *Table* y *markdown artifacts* con las inconsistencias; métricas `AegisVolt/Audit` (`OrphanSagas`, `CompensatedSagas`, `InconsistentSagas`) con `PutMetricData` |
-| `trace_correlation` | a demanda, parámetro `correlation_id` | `FilterLogEvents` sobre `/aegisvolt/<env>/*` | *Markdown artifact* con la línea temporal ordenada |
+| `environment_health_monitor` | cada 5 min | `/health/live` y `/health/ready` de las 5 unidades de cada ambiente; existencia de los log groups | Tabla y resumen; `EnvironmentHealthy`, `ServiceReady`; Failed si algún ambiente no está OPERATIONAL |
+| `saga_consistency_audit` | cada 10 min | `GET /v1/audit/sagas` (orquestador, por estado) y sesiones | SAGA-001 a SAGA-005 |
+| `reservation_consistency_audit` | cada 15 min | Reservas por flota, SAGA y sesión | RES-001 a RES-005 |
+| `billing_consistency_audit` | cada 15 min | Libro mayor por flota, débito, SAGA y sesión | BIL-001 a BIL-006 |
 
-- Prefect lee DynamoDB y CloudWatch con **boto3**, con el endpoint configurable: `http://localhost:4566` en local.
-- Las credenciales de Prefect son de solo lectura: en AWS real, un rol IAM con `dynamodb:Query/GetItem/DescribeTable` sobre `aegisvolt-*`, `logs:FilterLogEvents` y `cloudwatch:PutMetricData`.
-- Prefect **no** escribe en tablas de negocio: detecta y reporta, y la reparación la hace el orquestador o el runbook.
+- Cada hallazgo cita su regla (enunciado y justificación) y los hechos observados. Se publican artifacts (markdown y tabla) y métricas `AegisVolt/Audit` (`Findings`, `FindingsByRule`, `AuditErrors`).
+- Prefect **no** lee tablas ajenas ni escribe datos de negocio, y **no** es un segundo orquestador: detecta y reporta, y la reparación la hace el orquestador (recuperación) o una persona con el runbook.
+- La traza de un `correlation_id` se consulta con Logs Insights o FilterLogEvents (sección anterior). El flow `trace_correlation` de ADR-0014 no forma parte del alcance pedido para Prefect.

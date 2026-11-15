@@ -8,9 +8,12 @@ import {
 
 import {
   ConcurrentModificationError,
+  InvalidCursorError,
   SagaAlreadyExistsError,
   type Lease,
   type SagaRepository,
+  type StatusPage,
+  type StatusQuery,
   type Versioned,
 } from '../../application/index.ts';
 import {
@@ -231,6 +234,35 @@ export class DynamoDbSagaRepository implements SagaRepository {
     return found;
   }
 
+  async listByStatus(query: StatusQuery): Promise<StatusPage> {
+    const partition = keys.status(query.status);
+    // GSI2SK = `<updatedAt ISO>#<id>`: el orden lexicográfico es el temporal.
+    // [updatedAfter, updatedBefore): '0' y '9' acotan cualquier fecha ISO.
+    const from = query.updatedAfter?.toISOString() ?? '0';
+    const to = query.updatedBefore?.toISOString() ?? '9';
+    const result = await dynamo(() =>
+      this.db.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: GSI2,
+          KeyConditionExpression: 'GSI2PK = :pk AND GSI2SK BETWEEN :from AND :to',
+          ExpressionAttributeValues: { ':pk': partition, ':from': from, ':to': to },
+          ScanIndexForward: true,
+          Limit: query.limit,
+          ...(query.cursor === undefined
+            ? {}
+            : { ExclusiveStartKey: decodeCursor(query.cursor, partition) }),
+        }),
+      ),
+    );
+    return {
+      items: ((result.Items ?? []) as SagaItem[]).map(fromSagaItem),
+      ...(result.LastEvaluatedKey === undefined
+        ? {}
+        : { nextCursor: encodeCursor(result.LastEvaluatedKey) }),
+    };
+  }
+
   private eventPuts(saga: SagaTransaction): TransactItem[] {
     return saga.pendingEvents.map((event) => ({
       Put: {
@@ -244,4 +276,32 @@ export class DynamoDbSagaRepository implements SagaRepository {
   private async transact(items: TransactItem[]): Promise<void> {
     await dynamo(() => this.db.send(new TransactWriteCommand({ TransactItems: items })));
   }
+}
+
+const CURSOR_KEYS = ['PK', 'SK', 'GSI2PK', 'GSI2SK'] as const;
+
+function encodeCursor(key: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(key), 'utf8').toString('base64url');
+}
+
+/** Solo se acepta un cursor con las claves del índice y de la MISMA partición (estado). */
+function decodeCursor(cursor: string, partition: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    throw new InvalidCursorError('Cursor inválido');
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new InvalidCursorError('Cursor inválido');
+  }
+  const record = parsed as Record<string, unknown>;
+  const valid =
+    Object.keys(record).length === CURSOR_KEYS.length &&
+    CURSOR_KEYS.every((key) => typeof record[key] === 'string') &&
+    record.GSI2PK === partition;
+  if (!valid) {
+    throw new InvalidCursorError('Cursor inválido o de otra consulta');
+  }
+  return record as Record<string, string>;
 }

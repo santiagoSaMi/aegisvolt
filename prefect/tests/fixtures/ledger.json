@@ -1,0 +1,199 @@
+{
+  "now": "2026-11-14T12:00:00.000Z",
+  "description": "Respuestas de las APIs (formato de packages/contracts). `_scenario` documenta qué regla debe (o no) dispararse.",
+  "items": [
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000101",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-1",
+      "correlationId": "corr-l1",
+      "idempotencyKey": "k-1",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000001",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000102",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-2",
+      "correlationId": "corr-l2",
+      "idempotencyKey": "k-2",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000040",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000040"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000103",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-3",
+      "correlationId": "corr-l3",
+      "idempotencyKey": "k-3",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000016",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000016"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000104",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-4",
+      "correlationId": "corr-l4",
+      "idempotencyKey": "k-4",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000020",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000020"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000105",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-5",
+      "correlationId": "corr-l5",
+      "idempotencyKey": "k-5",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000004",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000004"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000106",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-6",
+      "correlationId": "corr-l6",
+      "idempotencyKey": "k-6",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000015",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000015"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000107",
+      "fleetId": "fleet_alfa",
+      "type": "REFUND",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-7",
+      "correlationId": "corr-l7",
+      "idempotencyKey": "k-7",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000015",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000015",
+      "refundId": "rfd_00000000-0000-4000-8000-000000000015"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000108",
+      "fleetId": "fleet_alfa",
+      "type": "DEBIT",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-8",
+      "correlationId": "corr-l8",
+      "idempotencyKey": "k-8",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000109",
+      "fleetId": "fleet_alfa",
+      "type": "REFUND",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-9",
+      "correlationId": "corr-l9",
+      "idempotencyKey": "k-9",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010",
+      "refundId": "rfd_00000000-0000-4000-8000-000000000010"
+    },
+    {
+      "transactionId": "wtx_00000000-0000-4000-8000-000000000110",
+      "fleetId": "fleet_alfa",
+      "type": "REFUND",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "balanceAfter": {
+        "amountMinor": 1000000,
+        "currency": "COP"
+      },
+      "operationId": "op-10",
+      "correlationId": "corr-l10",
+      "idempotencyKey": "k-10",
+      "occurredAt": "2026-11-14T11:00:00.000Z",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010",
+      "refundId": "rfd_00000000-0000-4000-8000-000000001010"
+    }
+  ]
+}

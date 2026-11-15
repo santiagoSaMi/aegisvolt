@@ -69,7 +69,16 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 
 - El API server de k3s se publica en `0.0.0.0:65xx` del host, no solo en loopback.
 - El registry de ECR (`127.0.0.1:5100`) sigue en ejecución después de `stop.sh`.
-- **Mitigación:** uso exclusivamente local. Se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST` en el futuro.
+- **Consola web de Floci** (verificado el 2026-11-14 con Floci 2.4.0):
+  - Abrir `http://localhost:4566/_floci/ui` descarga `floci/floci-ui:0.7.0` y arranca el contenedor hermano `floci-aws-ui` en **`0.0.0.0:4500`**, accesible desde la red local, no solo desde el equipo.
+  - **No tiene autenticación** y permite crear y borrar recursos del emulador (log groups, alarmas, tablas…).
+  - Carga fuentes desde Google Fonts, así que hace peticiones a internet.
+  - Sigue en ejecución hasta detenerla (`stop.sh` no la detiene).
+- **Mitigación:**
+  - uso exclusivamente local;
+  - abrir la consola solo cuando se necesite y detenerla al terminar (`docker stop floci-aws-ui`);
+  - para consultas, preferir AWS CLI, que solo usa `127.0.0.1:4566` ([runbook](runbooks/cloudwatch-demo.md));
+  - más adelante se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST`.
 
 ## L-08 · Floci no evalúa IAM: el aislamiento de flags por ambiente no depende de políticas
 

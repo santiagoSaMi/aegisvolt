@@ -13,6 +13,7 @@ import { z } from 'zod';
 import type {
   GetSaga,
   ListFleetSagas,
+  ListSagasByStatus,
   ListSagaEvents,
   ReserveAndActivateCharging,
   RetryCompensation,
@@ -29,6 +30,7 @@ export interface SagaUseCases {
   readonly getSaga: GetSaga;
   readonly listSagaEvents: ListSagaEvents;
   readonly listFleetSagas: ListFleetSagas;
+  readonly listSagasByStatus: ListSagasByStatus;
 }
 
 const base = api.API.basePath;
@@ -37,6 +39,7 @@ const ROUTES = {
   saga: `${base}/sagas/:sagaId`,
   sagaEvents: `${base}/sagas/:sagaId/events`,
   retryCompensation: `${base}/sagas/:sagaId/compensation/retry`,
+  auditSagas: `${base}/audit/sagas`,
 } as const;
 
 const sagaParamsSchema = z.object({ sagaId: sagaIdSchema });
@@ -117,6 +120,16 @@ export function sagaRoutes(
     const query = parseRequest(api.listSagasQuerySchema, req.query, 'query');
     const sagas = await useCases.listFleetSagas.execute(query);
     sendJson(res, 200, { items: sagas.map(toSagaView) });
+  });
+
+  /** Auditoría (Prefect, ADR-0030): SAGAs por estado en todas las flotas. Solo lectura. */
+  router.get(ROUTES.auditSagas, logOperation('ListSagasByStatus'), async (req, res) => {
+    const query = parseRequest(api.listAuditSagasQuerySchema, req.query, 'query');
+    const page = await useCases.listSagasByStatus.execute(query);
+    sendJson(res, 200, {
+      items: page.items.map(toSagaView),
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+    });
   });
 
   /** Reintento CONTROLADO de una compensación fallida. */

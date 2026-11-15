@@ -1,8 +1,11 @@
 import {
   ConcurrentModificationError,
   SagaAlreadyExistsError,
+  InvalidCursorError,
   type Lease,
   type SagaRepository,
+  type StatusPage,
+  type StatusQuery,
   type Versioned,
 } from '../../src/application/index.ts';
 import {
@@ -111,6 +114,28 @@ export class InMemorySagaRepository implements SagaRepository {
         .slice(0, limit)
         .map((row) => ({ value: row.saga, version: row.version })),
     );
+  }
+
+  listByStatus(query: StatusQuery): Promise<StatusPage> {
+    const matching = [...this.rows.values()]
+      .map((row) => row.saga)
+      .filter(
+        (s) =>
+          s.status === query.status &&
+          (query.updatedAfter === undefined || s.updatedAt >= query.updatedAfter) &&
+          (query.updatedBefore === undefined || s.updatedAt < query.updatedBefore),
+      )
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime() || a.id.localeCompare(b.id));
+    const offset = query.cursor === undefined ? 0 : Number(query.cursor);
+    if (!Number.isInteger(offset) || offset < 0) {
+      return Promise.reject(new InvalidCursorError('Cursor inválido'));
+    }
+    const items = matching.slice(offset, offset + query.limit);
+    const next = offset + items.length;
+    return Promise.resolve({
+      items,
+      ...(next < matching.length ? { nextCursor: String(next) } : {}),
+    });
   }
 
   /** Simula que el proceso dueño murió: su *lease* queda vencido. */

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createHttpApp } from '../../src/presentation/http/app.ts';
 import { FakeParticipants } from '../support/fake-participants.ts';
-import { CORRELATION_ID, KEY, SAGA_ID, createContext } from '../support/fixtures.ts';
+import { CORRELATION_ID, KEY, SAGA_ID, command, createContext, uuid } from '../support/fixtures.ts';
 
 const silentLogger = createLogger({
   service: 'test',
@@ -190,6 +190,62 @@ describe('consultas', () => {
     };
     expect(list.items).toHaveLength(1);
     expect((await fetch(`${url}/v1/sagas/saga_${'0'.repeat(8)}`)).status).toBe(404);
+  });
+});
+
+describe('GET /v1/audit/sagas (auditoría, ADR-0030)', () => {
+  it('lista por estado en todas las flotas, la más antigua primero, con rango temporal y cursor', async () => {
+    const ctx = createContext();
+    const url = await start(ctx);
+    const times: string[] = [];
+    for (const [i, fleetId] of ['fleet_001', 'fleet_002', 'fleet_003'].entries()) {
+      times.push(ctx.clock.now().toISOString());
+      await ctx.reserveAndActivateCharging.execute(
+        command({ idempotencyKey: uuid(100 + i), fleetId, connectorId: `cn_0${String(i + 1)}` }),
+      );
+      ctx.clock.advance(60_000);
+    }
+    const get = async (query: string) => {
+      const response = await fetch(`${url}/v1/audit/sagas?${query}`);
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+
+    const first = await get('status=COMPLETED&limit=2');
+    expect(first.status).toBe(200);
+    const page1 = sagaOrchestratorV1.listAuditSagasResponseSchema.parse(first.body);
+    expect(page1.items.map((s) => s.fleetId)).toEqual(['fleet_001', 'fleet_002']);
+    expect(page1.nextCursor).toEqual(expect.any(String));
+    const page2 = sagaOrchestratorV1.listAuditSagasResponseSchema.parse(
+      (await get(`status=COMPLETED&limit=2&cursor=${encodeURIComponent(page1.nextCursor ?? '')}`))
+        .body,
+    );
+    expect(page2.items.map((s) => s.fleetId)).toEqual(['fleet_003']);
+    expect(page2.nextCursor).toBeUndefined();
+
+    // updatedBefore excluye la tercera; updatedAfter la incluye sola.
+    const before = sagaOrchestratorV1.listAuditSagasResponseSchema.parse(
+      (await get(`status=COMPLETED&updatedBefore=${encodeURIComponent(times[2] ?? '')}`)).body,
+    );
+    expect(before.items).toHaveLength(2);
+    const after = sagaOrchestratorV1.listAuditSagasResponseSchema.parse(
+      (await get(`status=COMPLETED&updatedAfter=${encodeURIComponent(times[2] ?? '')}`)).body,
+    );
+    expect(after.items.map((s) => s.fleetId)).toEqual(['fleet_003']);
+    expect((await get('status=COMPENSATION_FAILED')).body).toEqual({ items: [] });
+  });
+
+  it('valida la consulta: estado obligatorio y conocido, cursor válido', async () => {
+    const url = await start(createContext());
+    for (const query of [
+      '',
+      'status=UNKNOWN',
+      'status=COMPLETED&limit=0',
+      'status=COMPLETED&cursor=xyz',
+      'status=COMPLETED&fleetId=fleet_001',
+    ]) {
+      const response = await fetch(`${url}/v1/audit/sagas?${query}`);
+      expect(response.status, query).toBe(400);
+    }
   });
 });
 

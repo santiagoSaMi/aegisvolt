@@ -187,6 +187,30 @@ describe.skipIf(!flociAvailable)(
       expect(await eventItems(saga.id)).toHaveLength(2);
     });
 
+    it('listByStatus: índice por estado, rango [updatedAfter, updatedBefore), más antigua primero y cursor', async () => {
+      const base = START.getTime() + 3_600_000; // fuera del rango de las demás pruebas
+      const at = (minutes: number) => new Date(base + minutes * 60_000);
+      for (const [i, n] of [701, 702, 703].entries()) {
+        const saga = newSaga(n);
+        await repo.create(saga, lease('audit'));
+        await repo.save(saga.withoutPendingEvents().beginStep(at(i)), 1, lease('audit'));
+      }
+      const query = { status: 'STARTED' as const, updatedAfter: at(0), limit: 2 };
+
+      const first = await repo.listByStatus(query);
+      expect(first.items.map((s) => s.id)).toEqual([`saga_${uuid(701)}`, `saga_${uuid(702)}`]);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      const second = await repo.listByStatus({ ...query, cursor: first.nextCursor });
+      expect(second.items.map((s) => s.id)).toEqual([`saga_${uuid(703)}`]);
+
+      const bounded = await repo.listByStatus({ ...query, updatedBefore: at(2), limit: 10 });
+      expect(bounded.items).toHaveLength(2);
+      // Un cursor de otra partición (estado) se rechaza: no sirve para leer otro índice.
+      await expect(
+        repo.listByStatus({ ...query, status: 'COMPLETED', cursor: first.nextCursor }),
+      ).rejects.toThrow(/Cursor/);
+    });
+
     it('lease: solo se toma libre, vencido o propio', async () => {
       const saga = newSaga(3);
       await repo.create(saga, lease('a', 30_000));

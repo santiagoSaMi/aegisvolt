@@ -72,3 +72,6 @@ tmp/
 
 # --- Evidencia generada por las pruebas E2E (ítems de DynamoDB y logs) ---
 tests/e2e/.evidence/
+
+# --- Prefect (estado local del servidor) ---
+prefect/.prefect-home/

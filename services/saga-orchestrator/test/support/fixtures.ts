@@ -1,6 +1,7 @@
 import {
   GetSaga,
   ListFleetSagas,
+  ListSagasByStatus,
   ListSagaEvents,
   RecoverPendingSagas,
   ReserveAndActivateCharging,
@@ -130,6 +131,7 @@ export function createContext(options: { participants?: FakeParticipants } = {})
       getSaga: new GetSaga({ sagas }),
       listSagaEvents: new ListSagaEvents({ sagas }),
       listFleetSagas: new ListFleetSagas({ sagas }),
+      listSagasByStatus: new ListSagasByStatus({ sagas }),
     };
   };
 

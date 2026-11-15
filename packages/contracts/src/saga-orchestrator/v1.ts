@@ -19,7 +19,7 @@ import { COMMON_ERROR_CODES, errorCodeSchema, problemSchemaFor } from '../proble
 
 export const API = {
   name: 'saga-orchestrator',
-  version: '1.1.0',
+  version: '1.2.0',
   basePath: '/v1',
 } as const;
 
@@ -30,6 +30,8 @@ export const paths = {
   saga: (sagaId: string) => `${API.basePath}/sagas/${enc(sagaId)}`,
   sagaEvents: (sagaId: string) => `${API.basePath}/sagas/${enc(sagaId)}/events`,
   retryCompensation: (sagaId: string) => `${API.basePath}/sagas/${enc(sagaId)}/compensation/retry`,
+  /** Desde 1.2.0: consulta de auditoría (Prefect), solo lectura. */
+  auditSagas: () => `${API.basePath}/audit/sagas`,
 } as const;
 
 // --- Vocabulario público ---------------------------------------------------
@@ -185,6 +187,26 @@ export const listSagasQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export const listSagasResponseSchema = z.object({ items: z.array(sagaViewSchema) });
+
+/**
+ * `GET /v1/audit/sagas?status=&updatedAfter=&updatedBefore=&limit=&cursor=` (desde
+ * 1.2.0): SAGAs con un estado en TODAS las flotas, la de actualización MÁS
+ * ANTIGUA primero (las más sospechosas de estar detenidas). Solo lectura, para la
+ * auditoría de Prefect (ADR-0030); usa el índice por estado, sin Scan.
+ * - `updatedAfter` (incluido) y `updatedBefore` (excluido) acotan `updatedAt`.
+ * - `cursor`: opaco (`nextCursor` de la página anterior); inválido → 400 VALIDATION_ERROR.
+ */
+export const listAuditSagasQuerySchema = z.strictObject({
+  status: sagaStatusSchema,
+  updatedAfter: isoDateTimeSchema.optional(),
+  updatedBefore: isoDateTimeSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+});
+export const listAuditSagasResponseSchema = z.object({
+  items: z.array(sagaViewSchema),
+  nextCursor: z.string().optional(),
+});
 
 /** `GET /v1/sagas/{sagaId}/events`: historial (panel de compensaciones del frontend). */
 export const sagaEventViewSchema = z.object({

@@ -40,4 +40,22 @@ export interface SagaRepository {
   ): Promise<readonly SagaTransaction[]>;
   /** SAGAs no terminales (candidatas a recuperación), por índice de estado. */
   listNonTerminal(limit: number): Promise<readonly Versioned<SagaTransaction>[]>;
+  /**
+   * SAGAs con `status` en todas las flotas, la de `updatedAt` más antigua
+   * primero, con `updatedAt` en [updatedAfter, updatedBefore). Cursor opaco.
+   */
+  listByStatus(query: StatusQuery): Promise<StatusPage>;
+}
+
+export interface StatusQuery {
+  readonly status: SagaStatus;
+  readonly updatedAfter?: Date | undefined;
+  readonly updatedBefore?: Date | undefined;
+  readonly limit: number;
+  readonly cursor?: string | undefined;
+}
+
+export interface StatusPage {
+  readonly items: readonly SagaTransaction[];
+  readonly nextCursor?: string | undefined;
 }

@@ -1,0 +1,139 @@
+{
+  "now": "2026-11-14T12:00:00.000Z",
+  "description": "Respuestas de las APIs (formato de packages/contracts). `_scenario` documenta qué regla debe (o no) dispararse.",
+  "items": [
+    {
+      "_scenario": "Débito de una carga activa: correcto",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000001",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000001",
+      "fleetId": "fleet_alfa",
+      "status": "DEBITED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-001: su SAGA no existe",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000040",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000040",
+      "fleetId": "fleet_alfa",
+      "status": "DEBITED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-002: SAGA compensada sin reembolso",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000016",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000016",
+      "fleetId": "fleet_alfa",
+      "status": "DEBITED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-003: SAGA completada con la sesión FAILED",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000020",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000020",
+      "fleetId": "fleet_alfa",
+      "status": "DEBITED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-004: reembolso pendiente (SAGA COMPENSATION_FAILED hace 1 h)",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000004",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000004",
+      "fleetId": "fleet_alfa",
+      "status": "DEBITED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-005: reembolso de una SAGA completada",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000015",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000015",
+      "fleetId": "fleet_alfa",
+      "status": "REFUNDED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "Reembolsado en una SAGA compensada: correcto",
+      "debitId": "dbt_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010",
+      "fleetId": "fleet_alfa",
+      "status": "REFUNDED",
+      "amount": {
+        "amountMinor": 3000000,
+        "currency": "COP"
+      },
+      "pricing": {
+        "tariffMinorPerKwh": 100000,
+        "energyKwh": 30,
+        "surgeApplied": false,
+        "surgeMultiplierBasisPoints": 10000
+      },
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    }
+  ]
+}
