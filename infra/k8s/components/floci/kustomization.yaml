@@ -3,6 +3,7 @@ kind: Component
 # SOLO entorno local (Floci). En AWS real no se incluye.
 resources:
   - service-floci.yaml
+  - apps-floci.yaml
 configMapGenerator:
   # Sustituye la salida de CloudWatch por la de Floci (endpoint, puerto y sin TLS).
   - name: fluent-bit-config
@@ -14,6 +15,11 @@ secretGenerator:
   # Credenciales FICTICIAS del emulador (CLAUDE.md). Nunca credenciales reales.
   - name: floci-aws
     namespace: logging
+    literals:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+  - name: floci-aws
+    namespace: aegisvolt
     literals:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
@@ -41,3 +47,29 @@ patches:
           name: floci-ca
           mountPath: /fluent-bit/floci-ca
           readOnly: true
+  # Apps Node: endpoint de Floci y credenciales ficticias.
+  - target:
+      kind: Deployment
+      namespace: aegisvolt
+      annotationSelector: aegisvolt.io/runtime=node
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          configMapRef:
+            name: floci-endpoint
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          secretRef:
+            name: floci-aws
+  # Web: el login de Cognito se reenvía a Floci (HTTP) en lugar de cognito-idp.
+  - target:
+      kind: Deployment
+      name: web
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: COGNITO_UPSTREAM
+            value: http://floci:4566

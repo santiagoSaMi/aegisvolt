@@ -1,13 +1,54 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Clúster dev (ADR-0012). Por ahora solo la recolección de logs (ADR-0029); la
-# fase de K8s añade las aplicaciones.
+# Clúster dev (un clúster por ambiente, ADR-0012). Las imágenes las fija el
+# despliegue por commit (scripts/floci/k8s-deploy.sh: kustomize images sha-<commit>).
 resources:
-  - ../../base/logging
+  - ../../base
 components:
-  # Local: los logs van a Floci. En AWS real se quita este componente.
+  # Local: AWS = Floci (endpoint, credenciales ficticias, logs). En AWS real se quita.
   - ../../components/floci
+configMapGenerator:
+  - name: station-reservation-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=debug
+      - DYNAMODB_TABLE_NAME=aegisvolt-reservations-dev
+  - name: billing-wallet-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=debug
+      - DYNAMODB_TABLE_NAME=aegisvolt-billing-dev
+  - name: energy-dispatch-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=debug
+      - DYNAMODB_TABLE_NAME=aegisvolt-dispatch-dev
+  - name: saga-orchestrator-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=debug
+      - DYNAMODB_TABLE_NAME=aegisvolt-sagas-dev
+  - name: graphql-api-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=debug
+  - name: web-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=dev
 patches:
+  # Ambiente del colector de logs: /aegisvolt/dev/<servicio> (ADR-0029).
   - target:
       kind: DaemonSet
       name: fluent-bit

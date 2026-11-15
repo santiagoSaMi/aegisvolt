@@ -1,0 +1,54 @@
+# Políticas comunes del namespace aegisvolt (ADR-0031). Las NetworkPolicy se suman:
+# todo lo que no permite alguna política queda denegado.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: aegisvolt
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Resolución de nombres (CoreDNS en kube-system).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: aegisvolt
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# APIs de AWS (DynamoDB, Cognito JWKS/InitiateAuth) por HTTPS. En AWS real el
+# tráfico va a los VPC Endpoints (ADR-0010); en local lo sustituye allow-floci-egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-aws-egress
+  namespace: aegisvolt
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: aegisvolt
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
