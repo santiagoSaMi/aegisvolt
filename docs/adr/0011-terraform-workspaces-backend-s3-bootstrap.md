@@ -1,6 +1,6 @@
 # ADR-0011: Terraform con raíz única por workspace, backend S3 versionado, bootstrap y guardas por ambiente
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. Implementado y concretado por [ADR-0033](0033-terraform-modular-backend-s3-floci.md) (2026-11-15): `global/` contiene ECR y el ajuste de API Gateway; `envs/<env>.tfvars` y las guardas están implementados; el bucket se llama `aegisvolt-tfstate` (una sola cuenta en Floci)
 - **Fecha:** 2026-11-12
 
 ## Contexto

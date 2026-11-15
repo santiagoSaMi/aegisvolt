@@ -6,10 +6,12 @@
 #   --no-smoke        no ejecuta la prueba de humo final
 #   --no-wait-canary  no espera a que el canary de graphql-api termine (Argo Rollouts)
 #
-# Pasos (idempotentes): imágenes con tag inmutable → ECR de Floci → clúster aegisvolt-<env>
-# → tablas y Cognito del ambiente → kustomize (overlay + imágenes del commit) → rollout
-# → prueba de humo (salud, login real con Cognito vía la web, consulta GraphQL).
-# Requiere `scripts/floci/terraform-live.sh <env> apply` (log groups de CloudWatch).
+# Pasos (idempotentes): imágenes con tag inmutable → push al ECR de Floci → kubeconfig del
+# clúster aegisvolt-<env> → Cognito del ambiente → kustomize (overlay + imágenes del
+# commit) → rollout → prueba de humo (salud, login real con Cognito vía la web, GraphQL).
+# La infraestructura es de Terraform (ADR-0033) y debe existir antes:
+#   scripts/floci/terraform-global.sh apply      (repositorios ECR)
+#   scripts/floci/terraform-live.sh <env> apply  (red, tablas, IAM, clúster EKS, log groups)
 # Nunca destruye nada; para borrar el clúster ver docs/runbooks/k8s-floci.md.
 source "$(dirname "$0")/lib.sh"
 
@@ -59,8 +61,9 @@ log_ok "Imágenes aegisvolt/*:${TAG}"
 # --- 2. ECR de Floci ------------------------------------------------------------------------
 aws ecr get-login-password | docker login --username AWS --password-stdin localhost:4566 >/dev/null
 for app in "${APPS[@]}"; do
+  # Repositorios de Terraform (infra/terraform/global, módulo ecr).
   aws ecr describe-repositories --repository-names "aegisvolt/${app}" >/dev/null 2>&1 \
-    || aws ecr create-repository --repository-name "aegisvolt/${app}" --image-tag-mutability IMMUTABLE >/dev/null
+    || die "No existe el repositorio aegisvolt/${app}: scripts/floci/terraform-global.sh apply"
   if aws ecr describe-images --repository-name "aegisvolt/${app}" --image-ids "imageTag=${TAG}" >/dev/null 2>&1; then
     continue  # tag inmutable ya publicado
   fi
@@ -70,15 +73,9 @@ done
 log_ok "Imágenes en ECR (${REGISTRY}/aegisvolt/*:${TAG})"
 
 # --- 3. Clúster EKS (k3s) ---------------------------------------------------------------
-if ! aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1; then
-  log_info "Creando el clúster ${CLUSTER}"
-  ROLE_ARN="$(aws iam get-role --role-name "${CLUSTER}-cluster" --query Role.Arn --output text 2>/dev/null \
-    || aws iam create-role --role-name "${CLUSTER}-cluster" --query Role.Arn --output text \
-         --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"eks.amazonaws.com"},"Action":"sts:AssumeRole"}]}')"
-  SUBNETS="$(aws ec2 describe-subnets --filters Name=default-for-az,Values=true --query 'Subnets[0:2].SubnetId' --output text | tr '\t' ',')"
-  aws eks create-cluster --name "$CLUSTER" --kubernetes-version 1.36 --role-arn "$ROLE_ARN" \
-    --resources-vpc-config "subnetIds=${SUBNETS}" >/dev/null
-fi
+# El clúster es de Terraform (módulo eks, ADR-0033): este script no lo crea.
+aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1 \
+  || die "No existe el clúster ${CLUSTER}. Créelo con Terraform: scripts/floci/terraform-live.sh ${ENV} apply (eks.enabled=true en envs/${ENV}.tfvars)"
 for _ in $(seq 1 60); do
   [[ "$(aws eks describe-cluster --name "$CLUSTER" --query cluster.status --output text)" == ACTIVE ]] && break
   sleep 5

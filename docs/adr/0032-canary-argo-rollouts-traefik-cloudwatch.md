@@ -107,7 +107,7 @@ Sintaxis del resultado del proveedor CloudWatch (comprobada):
   - `server_error` corresponde a los códigos `SERVICE_UNAVAILABLE` e `INTERNAL_SERVER_ERROR`;
   - los errores de cliente (validación, autenticación, reglas de negocio) no cuentan;
   - las SAGAs `COMPENSATED` son resultados de negocio válidos y tampoco cuentan.
-- **Métricas:** dos metric filters de Terraform (`modules/observability`) sobre `/aegisvolt/<env>/graphql-api`, con dimensiones `ServiceName` y `Version`.
+- **Métricas:** dos metric filters de Terraform (`modules/cloudwatch`) sobre `/aegisvolt/<env>/graphql-api`, con dimensiones `ServiceName` y `Version`.
 - **Ambiente:** el argumento `environment` lo fija cada overlay (`AegisVolt/dev|test|prod`).
 
 ## Alternativas

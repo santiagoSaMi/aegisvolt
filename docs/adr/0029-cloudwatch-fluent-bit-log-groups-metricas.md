@@ -56,7 +56,7 @@ Se probó Fluent Bit 5.1.5 contra Floci 2.4.0:
   - `overlays/<env>`.
 - **Seguridad del pod:** corre como root solo para leer `/var/log` del nodo, con `readOnlyRootFilesystem`, sin capacidades, sin escalada de privilegios y con `seccomp RuntimeDefault`. En AWS real, el rol IRSA o Pod Identity solo debe permitir `logs:CreateLogStream`, `logs:PutLogEvents` y `logs:DescribeLogStreams` sobre `/aegisvolt/<env>/*`.
 
-### Log groups, métricas y alarmas: Terraform (`modules/observability`)
+### Log groups, métricas y alarmas: Terraform (`modules/cloudwatch`)
 
 - **Raíz y estado:**
   - `infra/terraform/live` es la raíz única; el workspace es el ambiente, y otro workspace hace fallar el plan;

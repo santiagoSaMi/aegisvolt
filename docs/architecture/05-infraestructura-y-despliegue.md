@@ -7,23 +7,24 @@ Cubre los puntos 14 y 15. Decisiones: [ADR-0011](../adr/0011-terraform-workspace
 ### Estructura
 
 ```text
-infra/terraform/
-  bootstrap/        # bucket de estado (versioning, cifrado, public access block). Estado inicial local → migrado al bucket
-  global/           # recursos compartidos entre ambientes: repositorios ECR. Clave de estado propia, sin workspaces
+infra/terraform/      (implementado: ADR-0033)
+  bootstrap/        # bucket de estado (versioning, SSE, public access block, ownership, política, lifecycle). Estado local inicial → migrado al bucket
+  global/           # compartido entre ambientes: repositorios ECR y ajuste de cuenta de API Gateway. Clave de estado propia, sin workspaces
   live/             # raíz única de los ambientes. Workspaces dev | test | prod
-    main.tf  variables.tf  outputs.tf  backend.tf (parcial)
+    main.tf  variables.tf  outputs.tf  providers.tf  moved.tf  feature-flags.json
+    config/floci/{backend.hcl,target.tfvars}   # destino local (separado de cualquier destino real)
     envs/dev.tfvars  envs/test.tfvars  envs/prod.tfvars
   modules/
-    network/        # VPC, subredes, rutas, NAT, SG
-    vpc-endpoints/  # Gateway (S3, DynamoDB) + Interface (logs, monitoring, ecr.*, sts, eks, elb, execute-api) + policies
-    dynamodb-table/ # tabla genérica (PK/SK, GSIs, PITR, deletion protection, TTL)
-    data/           # instancia las 5 tablas del ambiente + semilla de flags
-    eks/            # clúster, node group, acceso (privado/público)
-    edge/           # NLB interno, target groups, VPC Link, API REST pública y PRIVATE, stages
-    identity/       # Cognito User Pool, grupos, cliente
-    observability/  # log groups /aegisvolt/<env>/<svc>, retención, metric filters, alarmas
-    iam/            # roles por servicio con mínimo privilegio
+    network/        # VPC, subredes, rutas, NAT, VPCE Gateway e Interface con sus políticas
+    dynamodb-table/ # tabla genérica (PK/SK, GSIs, PITR, deletion protection, TTL); live/ instancia las 5 del ambiente y la semilla de flags
+    eks/            # clúster, node group, roles, addon y Pod Identity
+    api-gateway/    # NLB interno, VPC Link, API REST pública y PRIVATE, stages
+    cloudwatch/     # log groups /aegisvolt/<env>/<svc>, retención, metric filters, alarmas
+    iam/            # roles por servicio con mínimo privilegio (Pod Identity)
+    ecr/            # repositorios inmutables (instanciado en global/)
 ```
+
+> Cognito (`identity`) sigue fuera de Terraform: [L-13](../limitations.md#l-13--cognito-todavía-se-crea-con-aws-cli).
 
 ### Backend
 
@@ -33,7 +34,7 @@ terraform { backend "s3" {} }
 ```
 
 - **Clave:** `aegisvolt/terraform.tfstate`. El prefijo por defecto `workspace_key_prefix = "env:"` produce `env:/dev/aegisvolt/terraform.tfstate`, `env:/test/...` y `env:/prod/...`.
-- **Bucket:** `aegisvolt-tfstate-<cuenta>`, con *versioning* `Enabled`, cifrado SSE, *public access block* y *lifecycle* que conserva versiones antiguas N días.
+- **Bucket:** `aegisvolt-tfstate` (en AWS real, con sufijo de cuenta), con *versioning* `Enabled`, cifrado SSE, *public access block* y *lifecycle* que conserva las versiones antiguas 90 días y siempre las 10 últimas.
 - **Bloqueo:** `use_lockfile = true`, nativo de S3; `dynamodb_table` está deprecado según la documentación de Terraform.
 - **Configuración separada:** el backend se configura **aparte** del provider (verificado en la fase de Floci). En local usa `endpoints.s3 = http://localhost:4566` y `use_path_style`.
 - **Bootstrap:** el bucket no puede vivir en el estado que guarda. `bootstrap/` se aplica primero con backend local y luego se migra a sí mismo al bucket con `terraform init -migrate-state`.
@@ -58,7 +59,7 @@ terraform workspace select dev && terraform state push restored.tfstate     # o 
 terraform plan   # debe mostrar exactamente la diferencia esperada
 ```
 
-Se documentará como runbook en `docs/runbooks/` durante la fase de IaC.
+Runbook: [terraform-floci.md](../runbooks/terraform-floci.md).
 
 ## 15. EKS/Kubernetes, despliegues y canary
 

@@ -62,8 +62,11 @@ k -n aegisvolt port-forward svc/billing-wallet-service 18102:80 >/dev/null 2>&1 
 PF_BW=$!
 trap 'kill $PF_WEB $PF_ST $PF_BW 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:18080/healthz 2>/dev/null && curl -fsS -o /dev/null http://127.0.0.1:18102/health/live 2>/dev/null && break; sleep 1; done
-# Datos de demostración por las APIs de los servicios (operador: port-forward).
-curl -fsS -o /dev/null -X PUT http://127.0.0.1:18101/v1/stations/st_k8s-demo-01 -H 'content-type: application/json' \
+# Datos de demostración por las APIs de los servicios (operador: port-forward). Una
+# estación por ejecución: la SAGA deja el conector OCCUPIED (carga activa) y una estación
+# fija se quedaría sin conectores libres tras dos verificaciones.
+STATION="st_k8s-$(date +%s)"
+curl -fsS -o /dev/null -X PUT "http://127.0.0.1:18101/v1/stations/${STATION}" -H 'content-type: application/json' \
   -d '{"name":"Estación K8s","city":"medellin","location":{"latitude":6.2,"longitude":-75.5},"connectors":[{"connectorId":"cn_01","type":"CCS2","maxPowerKw":60},{"connectorId":"cn_02","type":"CCS2","maxPowerKw":60}]}' || true
 curl -fsS -o /dev/null -X PUT "http://127.0.0.1:18102/v1/wallets/${DEMO_FLEET}" -H 'content-type: application/json' -d '{}' || true
 curl -fsS -o /dev/null -X PUT "http://127.0.0.1:18102/v1/wallets/${DEMO_FLEET}/top-ups/tup_k8s-$(date +%s)" -H 'content-type: application/json' \
@@ -75,9 +78,9 @@ TOKEN="$(curl -fsS http://127.0.0.1:18080/auth/cognito -H 'content-type: applica
 CORR="$(cat /proc/sys/kernel/random/uuid)"
 STARTED_AT="$(date -u -d '-1 min' +%FT%TZ)"
 CONNECTOR="$(curl -fsS http://127.0.0.1:18080/graphql -H 'content-type: application/json' -H "authorization: Bearer ${TOKEN}" \
-  -d '{"query":"{ availableConnectors(stationId: \"st_k8s-demo-01\") { connector { connectorId } } }"}' | jq -r '.data.availableConnectors[0].connector.connectorId')"
+  -d "{\"query\":\"{ availableConnectors(stationId: \\\"${STATION}\\\") { connector { connectorId } } }\"}" | jq -r '.data.availableConnectors[0].connector.connectorId')"
 RESULT="$(curl -fsS http://127.0.0.1:18080/graphql -H 'content-type: application/json' -H "authorization: Bearer ${TOKEN}" -H "x-correlation-id: ${CORR}" \
-  -d "{\"query\":\"mutation { reserveAndActivateCharging(input:{idempotencyKey:\\\"$(cat /proc/sys/kernel/random/uuid)\\\", stationId:\\\"st_k8s-demo-01\\\", connectorId:\\\"${CONNECTOR}\\\", requestedEnergyKwh: 10}) { saga { status sagaId } } }\"}")"
+  -d "{\"query\":\"mutation { reserveAndActivateCharging(input:{idempotencyKey:\\\"$(cat /proc/sys/kernel/random/uuid)\\\", stationId:\\\"${STATION}\\\", connectorId:\\\"${CONNECTOR}\\\", requestedEnergyKwh: 10}) { saga { status sagaId } } }\"}")"
 STATUS="$(echo "$RESULT" | jq -r '.data.reserveAndActivateCharging.saga.status')"
 [[ "$STATUS" == COMPLETED ]] && record "SAGA por la web" ok "COMPLETED (correlation_id ${CORR})" || record "SAGA por la web" fail "$RESULT"
 
