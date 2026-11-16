@@ -35,6 +35,13 @@ ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.title="web" \
       org.opencontainers.image.source="aegisvolt" \
       org.opencontainers.image.revision="${GIT_SHA}"
+# Parche de seguridad sobre la base fijada (gate CRITICAL de trivy-images, ADR-0035):
+# brotli-libs 1.2.1-r0 corrige CVE-2026-111497 (escritura fuera de límites en el decodificador)
+# y se publicó en Alpine 3.24 el 2026-10-22. La última nginx-unprivileged:1.30-alpine
+# (1.30.6, 2026-10-19) aún trae 1.2.0-r1. Retirar cuando una base nueva lo incluya.
+# La restricción >= hace fallar el build si el repositorio no ofrece la versión corregida.
+USER root
+RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0'
 # Valores por defecto NO sensibles; APP_ENV, COGNITO_CLIENT_ID y los upstreams son obligatorios.
 ENV WEB_POLLING_INTERVAL_MS=5000 \
     WEB_CITIES_JSON='["bogota"]' \
