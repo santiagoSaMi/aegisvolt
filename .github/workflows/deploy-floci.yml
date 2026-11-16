@@ -1,0 +1,122 @@
+# Despliegue post-merge en un Floci TEMPORAL del runner (ADR-0035).
+#
+# Tras un merge a dev, test o prod (o un workflow_dispatch sobre una de esas ramas):
+#   1. identifica el ambiente por la rama (otra rama falla en `resolve`, antes de tocar
+#      cualquier environment);
+#   2. levanta Floci (versión fijada por digest) y aplica bootstrap y global;
+#   3. REGENERA el plan del workspace para el commit integrado, lo publica, rechaza
+#      destrucciones y aplica ese mismo plan;
+#   4. construye las imágenes con etiqueta inmutable sha-<commit> (nunca latest), las sube
+#      al ECR del Floci temporal y despliega en el EKS (k3s) temporal;
+#   5. verificaciones: humo, red/API Gateway (GraphQL por HTTPS de punta a punta) y K8s;
+#   6. canary del release (canary-deployment.yml) en otro ambiente temporal.
+#
+# TODO es efímero: el Floci y el clúster mueren con el runner. NO modifica el Floci
+# persistente del autor (no es accesible desde GitHub y no debe exponerse a Internet), y
+# no hay persistencia entre ejecuciones. Solo runners hospedados; nunca código de PRs.
+name: deploy-floci
+
+on:
+  push:
+    branches: [dev, test, prod]
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  resolve:
+    name: resolve-environment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - id: env
+        run: scripts/ci/resolve-environment.sh
+
+  deploy:
+    name: deploy
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    # Environment existente (dev | test | prod): sus reglas (ramas permitidas, revisores en
+    # prod) se configuran a mano (docs/runbooks/github-repository-settings.md).
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: deploy-floci-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Workspace = rama integrada
+        env:
+          EXPECTED_ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+        run: scripts/ci/resolve-environment.sh
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: kubectl fijado y verificado
+        run: scripts/ci/install-kubectl.sh
+
+      - name: Espacio y capacidad del runner (Floci + k3s + 6 imágenes)
+        run: |
+          scripts/ci/free-runner-disk.sh
+          scripts/ci/runner-preflight.sh 10 20
+
+      - name: Floci temporal + Terraform (plan regenerado, revisado y aplicado)
+        run: scripts/ci/floci-environment.sh "$ENVIRONMENT"
+
+      - name: Imágenes sha-<commit> → ECR temporal → EKS temporal + humo
+        run: scripts/floci/k8s-deploy.sh "$ENVIRONMENT"
+
+      - name: Red, EKS y API Gateway (GraphQL por HTTPS de punta a punta)
+        run: |
+          scripts/floci/network-verify.sh "$ENVIRONMENT"
+          cat "infra/local/floci/.tmp/network-verify-${ENVIRONMENT}.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Operación en Kubernetes (NetworkPolicies, SAGA, CloudWatch)
+        run: |
+          scripts/floci/k8s-verify.sh "$ENVIRONMENT"
+          cat "infra/local/floci/.tmp/k8s-${ENVIRONMENT}/verify.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnóstico
+        if: failure()
+        run: scripts/ci/diagnostics.sh "$ENVIRONMENT"
+
+      - name: Informes (sin credenciales)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deploy-${{ needs.resolve.outputs.environment }}-reports
+          path: |
+            infra/local/floci/.tmp/network-verify-*.md
+            infra/local/floci/.tmp/k8s-*/verify.md
+          if-no-files-found: ignore
+          retention-days: 14
+
+  canary:
+    name: canary
+    needs: [resolve, deploy]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/canary-deployment.yml
+    with:
+      environment: ${{ needs.resolve.outputs.environment }}
+      # Línea base = la rama antes del merge (push); en un dispatch, el commit anterior.
+      baseline_ref: ${{ github.event_name == 'push' && github.event.before || '' }}

@@ -2,6 +2,9 @@
 # Demostración del canary de graphql-api (Argo Rollouts + Traefik + CloudWatch de Floci).
 #
 # Uso: scripts/floci/canary-demo.sh <dev|test|prod> <success|failure>
+# Código de salida = veredicto de Argo frente a lo esperado (lo usa canary-deployment.yml):
+#   success → 0 si Argo PROMOVIÓ; 1 si ABORTÓ (rollback registrado en el informe).
+#   failure → 0 si Argo ABORTÓ y se restauró la estable; 1 si la versión rota se promovió.
 #   success  versión nueva sana: 20 % → análisis → 50 % → análisis → 100 % (promoción)
 #   failure  versión nueva con un error de configuración real (URL de station-reservation
 #            incorrecta): el análisis de tasa de error falla → abort → 100 % a la estable;
@@ -37,6 +40,8 @@ INITIAL_RS="$(k -n aegisvolt get rollout graphql-api -o jsonpath='{.status.stabl
 # --- 1. Versión nueva de graphql-api (imagen con etiqueta inmutable nueva) ------------------
 "${REPO_ROOT}/scripts/docker/build-images.sh" --only graphql-api --tag-file "${OUT}/tag" >/dev/null
 NEW_VERSION="$(cat "${OUT}/tag")"
+[[ "$NEW_VERSION" != "$STABLE_VERSION" ]] \
+  || die "La versión canary (${NEW_VERSION}) es la misma que la estable: no hay release que evaluar"
 aws ecr get-login-password | docker login --username AWS --password-stdin localhost:4566 >/dev/null 2>&1
 docker tag "aegisvolt/graphql-api:${NEW_VERSION}" "${REGISTRY}/aegisvolt/graphql-api:${NEW_VERSION}"
 docker push -q "${REGISTRY}/aegisvolt/graphql-api:${NEW_VERSION}" >/dev/null
@@ -106,6 +111,12 @@ for _ in $(seq 1 200); do
   srs="$(jq -r '.status.stableRS' <<<"$ro")"
   if [[ "$phase" == Healthy && "$srs" != "$INITIAL_RS" && "$srs" == "$(jq -r '.status.currentPodHash' <<<"$ro")" ]]; then END_PHASE=Promoted; break; fi
   if [[ "$phase" == Degraded || "$(jq -r '.status.abort // false' <<<"$ro")" == true ]]; then END_PHASE=Aborted; break; fi
+  # Muestra insuficiente (Inconclusive): Argo pausa y espera a un operador. Sin operador
+  # (CI), la política es no promover: se aborta y queda registrado.
+  if jq -e '[.status.pauseConditions[]?.reason] | index("InconclusiveAnalysisRun")' <<<"$ro" >/dev/null; then
+    log_warn "Análisis inconcluso (muestra insuficiente): se aborta el canary"
+    k -n aegisvolt patch rollout graphql-api --subresource status --type merge -p '{"status":{"abort":true}}' >/dev/null
+  fi
   sleep 5
 done
 echo "$(date +%s%3N) end ${END_PHASE:-timeout}" >> "${OUT}/events.log"
@@ -176,3 +187,21 @@ for run in sorted(runs, key=lambda r: r["metadata"]["creationTimestamp"]):
 print("\n".join(lines))
 PY
 log_info "Evidencias: ${OUT}"
+
+# --- 7. Veredicto -------------------------------------------------------------------------------
+if [[ "$END_PHASE" == Aborted ]]; then
+  {
+    echo
+    echo "## Rollback"
+    echo
+    echo "Argo abortó la versión \`${NEW_VERSION}\`: el TraefikService volvió a 100 % para \`${STABLE_VERSION}\`."
+    echo "Motivo: $(jq -r '[.items[] | select(.status.phase=="Failed" or .status.phase=="Error" or .status.phase=="Inconclusive") | .status.message] | last // "sin mensaje"' "${OUT}/analysisruns.json")"
+  } >> "${OUT}/report.md"
+fi
+[[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && cat "${OUT}/report.md" >> "$GITHUB_STEP_SUMMARY"
+case "${SCENARIO}:${END_PHASE}" in
+  success:Promoted) log_ok "Canary promovido por el análisis";;
+  failure:Aborted)  log_ok "Canary abortado por el análisis y estable restaurada (esperado)";;
+  success:Aborted)  log_error "Canary ABORTADO por el análisis: rollback a ${STABLE_VERSION}"; exit 1;;
+  failure:Promoted) log_error "La versión defectuosa fue PROMOVIDA: el análisis no la detectó"; exit 1;;
+esac

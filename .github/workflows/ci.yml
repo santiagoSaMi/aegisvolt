@@ -1,0 +1,286 @@
+# CI de pull requests hacia las ramas protegidas (ADR-0035).
+#
+# - Solo runners hospedados por GitHub. Floci es TEMPORAL, dentro del runner (versión
+#   fijada por digest en infra/local/floci/docker-compose.yml), con credenciales ficticias
+#   y solo en 127.0.0.1. Nada de este workflow alcanza un Floci persistente.
+# - Los nombres de los jobs (`name:`) son ESTABLES: se usan como required status checks
+#   (docs/runbooks/github-repository-settings.md). No renombrarlos sin actualizar los rulesets.
+# - Un job omitido cuenta como "Success" para GitHub; por eso `ci-result` (if: always())
+#   falla si algún job no terminó en success, y es el check que de verdad bloquea.
+# - El plan de Terraform del PR está en terraform-plan.yml (job `terraform-plan`).
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, test, prod]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: '0'
+
+jobs:
+  promotion-guard:
+    name: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - name: Pruebas del guardia de promoción
+        run: scripts/ci/promotion-guard.test.sh
+      - name: Validar origen → destino
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: scripts/ci/promotion-guard.sh "$HEAD_REF" "$BASE_REF" "$HEAD_REPO" "$BASE_REPO"
+
+  lint:
+    name: lint
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm format:check
+      - run: pnpm lint
+      - name: Workflows (Actions fijadas por SHA, permisos, nombres únicos, sin inyección)
+        run: |
+          # venv: el Python del sistema en Ubuntu 24.04 es "externally managed" (PEP 668).
+          python3 -m venv "${RUNNER_TEMP}/wf"
+          "${RUNNER_TEMP}/wf/bin/pip" install --quiet pyyaml==6.0.3
+          "${RUNNER_TEMP}/wf/bin/python" scripts/ci/check-workflows.py
+
+  typecheck:
+    name: typecheck
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm typecheck
+
+  unit-tests:
+    name: unit-tests
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test
+
+  prefect-tests:
+    name: prefect-tests
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: prefect
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: prefect/pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check src tests && ruff format --check src tests
+      - run: mypy
+      - run: pytest -q
+
+  graphql-schema:
+    name: graphql-schema
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+      - name: Esquema válido y snapshot (schema.graphql) al día
+        working-directory: apps/graphql-api
+        run: node scripts/schema.ts --check
+      - name: Operaciones de la consola web válidas contra el esquema
+        run: pnpm build:packages && pnpm --filter @aegisvolt/web exec vitest run test/unit/graphql-operations.test.ts
+      - name: Cambios incompatibles frente a la rama destino
+        working-directory: apps/graphql-api
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          {
+            echo "## Esquema GraphQL frente a la rama destino"
+            if git show "${BASE_SHA}:apps/graphql-api/schema.graphql" > "${RUNNER_TEMP}/base.graphql" 2>/dev/null; then
+              node scripts/schema.ts --breaking "${RUNNER_TEMP}/base.graphql"
+            else
+              echo "La rama destino aún no publica schema.graphql: no hay base de comparación."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build
+    needs: [typecheck]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm build
+
+  integration-tests:
+    name: integration-tests
+    needs: [unit-tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: scripts/ci/runner-preflight.sh 4 5
+      - name: Floci temporal en el runner
+        run: scripts/floci/start.sh
+      - name: Integración (DynamoDB, GraphQL) contra Floci
+        env:
+          REQUIRE_INTEGRATION: 'true'
+        run: pnpm test:integration
+      - if: failure()
+        run: docker logs --tail 200 aegisvolt-floci
+
+  e2e-tests:
+    name: e2e-tests
+    needs: [integration-tests, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: scripts/ci/runner-preflight.sh 4 5
+      - name: Floci temporal en el runner
+        run: scripts/floci/start.sh
+      - name: Chromium para la prueba de la consola (versión de playwright-core del lockfile)
+        run: pnpm --filter @aegisvolt/e2e-tests exec playwright-core install --with-deps chromium
+      - name: E2E (SAGA, GraphQL con Cognito real, consola en Chromium)
+        env:
+          REQUIRE_INTEGRATION: 'true'
+        run: pnpm test:e2e
+      - if: failure()
+        run: docker logs --tail 200 aegisvolt-floci
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-evidence
+          path: tests/e2e/.evidence/
+          retention-days: 7
+
+  docker-build:
+    name: docker-build
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Construir las 6 imágenes (etiqueta inmutable sha-<commit>)
+        run: scripts/docker/build-images.sh --tag-file "${RUNNER_TEMP}/tag"
+      - name: Verificar la etiqueta y publicar el resumen
+        run: |
+          tag="$(cat "${RUNNER_TEMP}/tag")"
+          [[ "$tag" =~ ^sha-[0-9a-f]{12}$ ]] || { echo "::error::Etiqueta no inmutable: ${tag}"; exit 1; }
+          {
+            echo "## Imágenes \`${tag}\`"
+            echo
+            echo "| Imagen | Tamaño |"
+            echo "| --- | --- |"
+            docker images --filter "reference=aegisvolt/*:${tag}" --format '| {{.Repository}}:{{.Tag}} | {{.Size}} |'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  terraform-validate:
+    name: terraform-validate
+    needs: promotion-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+      - run: scripts/ci/terraform-static-checks.sh
+
+  ci-result:
+    name: ci-result
+    if: always()
+    needs:
+      - promotion-guard
+      - lint
+      - typecheck
+      - unit-tests
+      - prefect-tests
+      - graphql-schema
+      - build
+      - integration-tests
+      - e2e-tests
+      - docker-build
+      - terraform-validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Todos los jobs deben terminar en success (skipped o cancelled también fallan)
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad="$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
+          [[ -z "$bad" ]] || { echo "::error title=CI incompleto::Jobs sin éxito: ${bad}"; exit 1; }

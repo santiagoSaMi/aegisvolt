@@ -1,0 +1,555 @@
+"""Conector disponible para reservar, con datos de su estación."""
+type AvailableConnector {
+  city: String!
+  connector: Connector!
+  stationId: ID!
+  stationName: String!
+}
+
+"""Falla reportada por el cargador."""
+type ChargerFault {
+  """Código de falla (p. ej. E-HW-001)."""
+  code: String!
+
+  """true si la produjo la flag SIMULATE_CHARGER_HARDWARE_FAULT."""
+  simulated: Boolean!
+}
+
+"""
+Estimación previa de una carga, calculada por billing (tarifa, surge y flags).
+"""
+type ChargingEstimate {
+  """Saldo disponible de la billetera."""
+  available: Money!
+
+  """Potencia del conector elegido (kW)."""
+  connectorPowerKw: Float!
+
+  """Importe que se cobraría ahora."""
+  estimated: Money!
+  fleetId: ID!
+  requestedEnergyKwh: Float!
+
+  """true si el saldo alcanza."""
+  sufficient: Boolean!
+
+  """
+  true si se aplica el recargo de hora pico (flag ENABLE_DYNAMIC_SURGE_PRICING).
+  """
+  surgeApplied: Boolean!
+
+  """Multiplicador en puntos básicos (10000 = 1×)."""
+  surgeMultiplierBasisPoints: Int!
+  tariffMinorPerKwh: SafeInt!
+}
+
+"""Sesión de carga (despacho de energía)."""
+type ChargingSession {
+  connectorId: ID!
+  endedAt: DateTime
+
+  """Energía entregada según la última lectura."""
+  energyDeliveredKwh: Float
+  fault: ChargerFault
+  requestedEnergyKwh: Float!
+  sagaId: ID!
+  sessionId: ID!
+  startedAt: DateTime!
+  stationId: ID!
+  status: ChargingSessionStatus!
+  stopReason: String
+
+  """Últimas lecturas de telemetría (más reciente primero)."""
+  telemetry(
+    """Número de lecturas (1–100)."""
+    last: Int = 10
+  ): [TelemetryReading!]!
+  updatedAt: DateTime!
+}
+
+type ChargingSessionConnection {
+  items: [ChargingSession!]!
+  pageInfo: PageInfo!
+}
+
+"""Estado de una sesión de carga."""
+enum ChargingSessionStatus {
+  """Abortada por una compensación."""
+  ABORTED
+  ACTIVE
+
+  """Detenida normalmente."""
+  COMPLETED
+
+  """Falla física del cargador (real o simulada)."""
+  FAILED
+
+  """Abortada antes de activarse (tombstone)."""
+  VOIDED
+}
+
+"""Compensación fallida pendiente de reintento."""
+type CompensationFailure {
+  errorCode: String!
+  failedAt: DateTime!
+  nextAttemptAt: DateTime
+  round: Int!
+  step: String!
+}
+
+"""Punto de carga dentro de una estación."""
+type Connector {
+  """true si se puede reservar ahora (incluye holds vencidos)."""
+  availableForReservation: Boolean!
+  connectorId: ID!
+
+  """Potencia máxima en kW."""
+  maxPowerKw: Float!
+  status: ConnectorStatus!
+  type: ConnectorType!
+
+  """true si es ultra rápido (≥ 150 kW; requiere fastChargeBoost)."""
+  ultraFast: Boolean!
+}
+
+"""Estado efectivo de un conector en el momento de la consulta."""
+enum ConnectorStatus {
+  """Libre para reservar."""
+  AVAILABLE
+
+  """Carga en curso."""
+  OCCUPIED
+
+  """Mantenimiento o avería."""
+  OUT_OF_SERVICE
+
+  """Bloqueado temporalmente por una reserva (hold que vence)."""
+  RESERVED
+}
+
+"""Tipo físico de conector."""
+enum ConnectorType {
+  CCS2
+  CHADEMO
+  GBT
+  TYPE2
+}
+
+"""Fecha y hora UTC en ISO 8601 (p. ej. 2026-11-13T15:00:00.000Z)."""
+scalar DateTime
+
+"""Ambiente del despliegue que responde."""
+enum Environment {
+  dev
+  local
+  prod
+  test
+}
+
+"""Feature flag del ambiente del despliegue."""
+type FeatureFlag {
+  description: String!
+  enabled: Boolean!
+  key: String!
+  source: FeatureFlagSource!
+  updatedAt: DateTime
+  updatedBy: String
+  version: Int
+}
+
+"""Registro de auditoría de un cambio de flag."""
+type FeatureFlagChange {
+  changedAt: DateTime!
+  changedBy: String!
+  correlationId: String!
+  environment: Environment!
+  from: Boolean!
+  key: String!
+  to: Boolean!
+  version: Int!
+}
+
+"""Origen del valor de una flag."""
+enum FeatureFlagSource {
+  """La tabla no respondió o la flag no existe: valor seguro (false)."""
+  DEFAULT
+
+  """La tabla no respondió: último valor conocido."""
+  LAST_KNOWN
+
+  """Leído de la tabla del ambiente."""
+  STORE
+}
+
+"""Estado de las flags del ambiente."""
+type FeatureFlags {
+  """true si algún valor no viene de la tabla (fuente no disponible)."""
+  degraded: Boolean!
+  environment: Environment!
+  flags: [FeatureFlag!]!
+  readAt: DateTime!
+}
+
+"""Coordenadas geográficas."""
+type Location {
+  latitude: Float!
+  longitude: Float!
+}
+
+"""
+Importe en unidades menores enteras de una moneda ISO 4217 (p. ej. centavos de COP).
+"""
+type Money {
+  """Importe en unidades menores (entero; sin coma flotante)."""
+  amountMinor: SafeInt!
+
+  """Moneda ISO 4217."""
+  currency: String!
+}
+
+type Mutation {
+  """
+  Libera una reserva de la flota (no permitido mientras su SAGA está en curso o la carga está activa).
+  """
+  releaseReservation(reservationId: ID!): ReleaseReservationPayload!
+
+  """
+  Inicia la SAGA Reservar y Activar Carga (reserva → cobro → activación) para la flota.
+  """
+  reserveAndActivateCharging(input: ReserveAndActivateChargingInput!): ReserveAndActivateChargingPayload!
+
+  """Detiene una carga de la flota y libera su conector."""
+  stopChargingSession(sessionId: ID!): StopChargingSessionPayload!
+
+  """Cambia una feature flag del ambiente (solo platform-admins; auditado)."""
+  updateFeatureFlag(input: UpdateFeatureFlagInput!): UpdateFeatureFlagPayload!
+}
+
+"""Información de paginación por cursor."""
+type PageInfo {
+  """
+  Cursor opaco para pedir la página siguiente (argumento after); null si no hay más.
+  """
+  endCursor: String
+
+  """true si hay más resultados."""
+  hasNextPage: Boolean!
+}
+
+type Query {
+  """
+  Conectores disponibles ahora en una ciudad O en una estación (exactamente uno de los dos).
+  """
+  availableConnectors(city: String, stationId: ID): [AvailableConnector!]!
+
+  """
+  Importe estimado de una carga (lo calcula billing). Operadores: su flota; administradores: fleetId.
+  """
+  chargingEstimate(connectorId: ID!, fleetId: ID, requestedEnergyKwh: Float!, stationId: ID!): ChargingEstimate!
+
+  """Sesión de carga por id; null si no existe."""
+  chargingSessionById(sessionId: ID!): ChargingSession
+
+  """Sesiones de carga de una estación: activas (active: true) o histórico."""
+  chargingSessions(active: Boolean = false, after: String, first: Int = 20, stationId: ID!): ChargingSessionConnection!
+
+  """Feature flags del ambiente del despliegue."""
+  featureFlags: FeatureFlags!
+
+  """Reservas de la flota, la más reciente primero."""
+  reservations(after: String, first: Int = 20, fleetId: ID): ReservationConnection!
+
+  """Estado de una SAGA de la flota; null si no existe o no es visible."""
+  sagaStatus(sagaId: ID!): Saga
+
+  """
+  SAGAs de la flota, la más reciente primero (historial, errores y compensaciones).
+  """
+  sagas(first: Int = 20, fleetId: ID, status: SagaStatus): [Saga!]!
+
+  """Estación por id; null si no existe."""
+  stationById(stationId: ID!): Station
+
+  """Estaciones de una ciudad (slug en minúsculas, p. ej. bogota)."""
+  stations(city: String!): [Station!]!
+
+  """Readiness de los servicios internos."""
+  systemStatus: SystemStatus!
+
+  """Movimientos de la billetera, el más reciente primero."""
+  transactions(after: String, first: Int = 20, fleetId: ID): TransactionConnection!
+
+  """Identidad de quien llama: flota, rol y ambiente."""
+  viewer: Viewer!
+
+  """
+  Saldo de la billetera. Operadores: su flota (fleetId opcional). Administradores: fleetId obligatorio.
+  """
+  walletBalance(fleetId: ID): Wallet!
+}
+
+type ReleaseReservationPayload {
+  """RELEASED · ALREADY_RELEASED · VOIDED."""
+  outcome: String!
+  reservation: Reservation!
+}
+
+"""Reserva de un conector por una flota (la crea la SAGA)."""
+type Reservation {
+  connectorId: ID!
+  createdAt: DateTime!
+  fastChargeBoost: Boolean!
+  fleetId: ID!
+  holdExpiresAt: DateTime!
+  reservationId: ID!
+
+  """SAGA dueña de la reserva."""
+  sagaId: ID!
+  stationId: ID!
+  status: ReservationStatus!
+  updatedAt: DateTime!
+}
+
+type ReservationConnection {
+  items: [Reservation!]!
+  pageInfo: PageInfo!
+}
+
+"""Estado de una reserva."""
+enum ReservationStatus {
+  """Confirmada: la carga está en curso."""
+  CONFIRMED
+
+  """El hold venció sin confirmarse."""
+  EXPIRED
+
+  """Conector retenido temporalmente (vence en holdExpiresAt)."""
+  HELD
+
+  """Liberada (compensación, parada o liberación manual)."""
+  RELEASED
+
+  """Compensada antes de crearse (tombstone)."""
+  VOIDED
+}
+
+input ReserveAndActivateChargingInput {
+  connectorId: ID!
+
+  """Carga rápida reforzada (depende de la flag ENABLE_FAST_CHARGE_BOOST)."""
+  fastChargeBoost: Boolean = false
+
+  """
+  Flota (obligatoria para administradores; los operadores usan la de su token).
+  """
+  fleetId: ID
+
+  """
+  Clave idempotente de la acción del usuario (UUID generado por el cliente). Repetirla devuelve la misma SAGA.
+  """
+  idempotencyKey: ID!
+
+  """Energía solicitada en kWh (0 < kWh ≤ 500, resolución de 1 Wh)."""
+  requestedEnergyKwh: Float!
+  stationId: ID!
+}
+
+type ReserveAndActivateChargingPayload {
+  """false si la SAGA sigue en curso: consultar sagaStatus."""
+  finished: Boolean!
+  saga: Saga!
+}
+
+"""
+Entero seguro en JavaScript (|n| ≤ 2^53 − 1). Se usa para importes en unidades
+menores, que pueden superar el rango de Int (32 bits).
+"""
+scalar SafeInt
+
+"""
+Transacción distribuida Reservar y Activar Carga (orquestada; compensaciones, no ACID).
+"""
+type Saga {
+  compensationFailure: CompensationFailure
+  compensationPlan: [String!]!
+  connectorId: ID!
+  correlationId: String!
+  createdAt: DateTime!
+  debitId: ID!
+
+  """Historial completo de eventos."""
+  events: [SagaEvent!]!
+
+  """Motivo del fallo (p. ej. INSUFFICIENT_FUNDS, CHARGER_HARDWARE_FAULT)."""
+  failureReason: String
+  fastChargeBoost: Boolean!
+  fleetId: ID!
+  requestedEnergyKwh: Float!
+  reservationId: ID!
+  sagaId: ID!
+  sessionId: ID!
+  stationId: ID!
+  status: SagaStatus!
+  steps: [SagaStep!]!
+
+  """true si COMPLETED, COMPENSATED o FAILED."""
+  terminal: Boolean!
+  updatedAt: DateTime!
+}
+
+"""Evento del historial de la SAGA (panel de compensaciones)."""
+type SagaEvent {
+  attempt: Int
+  errorCode: String
+  occurredAt: DateTime!
+  sequence: Int!
+  status: SagaStatus!
+  step: String
+  type: String!
+}
+
+"""Estado de la SAGA Reservar y Activar Carga."""
+enum SagaStatus {
+  BILLING_COMPLETED
+
+  """Todas las compensaciones se verificaron."""
+  COMPENSATED
+  COMPENSATING
+
+  """Una compensación falló; se reintenta de forma automática o controlada."""
+  COMPENSATION_FAILED
+  COMPLETED
+  DISPATCH_COMPLETED
+
+  """Falló sin efectos que compensar (p. ej. conector no disponible)."""
+  FAILED
+  RESERVATION_COMPLETED
+  STARTED
+}
+
+"""Paso de la SAGA (avance o compensación)."""
+type SagaStep {
+  attempts: Int!
+  lastErrorCode: String
+  status: String!
+  step: String!
+  updatedAt: DateTime!
+}
+
+"""Disponibilidad (readiness) de un servicio interno."""
+type ServiceStatus {
+  latencyMs: Int!
+  ready: Boolean!
+  service: String!
+}
+
+"""Estación de carga con sus conectores."""
+type Station {
+  """Ciudad como slug en minúsculas (p. ej. bogota)."""
+  city: String!
+  connectors: [Connector!]!
+  location: Location!
+  name: String!
+  stationId: ID!
+}
+
+type StopChargingSessionPayload {
+  """STOPPED · ALREADY_STOPPED."""
+  outcome: String!
+
+  """Resultado de liberar la reserva (el conector vuelve a AVAILABLE)."""
+  reservationOutcome: String
+  session: ChargingSession!
+}
+
+"""Estado del sistema visto desde el graphql-api."""
+type SystemStatus {
+  checkedAt: DateTime!
+  environment: Environment!
+  services: [ServiceStatus!]!
+}
+
+"""Lectura de telemetría del cargador."""
+type TelemetryReading {
+  currentA: Float!
+
+  """Energía acumulada en la sesión (kWh)."""
+  energyKwh: Float!
+  powerKw: Float!
+  temperatureC: Float
+  timestamp: DateTime!
+  voltageV: Float!
+}
+
+"""Movimiento del libro mayor (auditable)."""
+type Transaction {
+  amount: Money!
+
+  """Saldo resultante tras el movimiento."""
+  balanceAfter: Money!
+
+  """correlation_id de la operación que lo originó."""
+  correlationId: String!
+  debitId: ID
+  fleetId: ID!
+  occurredAt: DateTime!
+  refundId: ID
+  sagaId: ID
+  topUpId: ID
+  transactionId: ID!
+  type: TransactionType!
+}
+
+type TransactionConnection {
+  items: [Transaction!]!
+  pageInfo: PageInfo!
+}
+
+"""Tipo de movimiento del libro mayor."""
+enum TransactionType {
+  """Cobro del importe estimado de una carga."""
+  DEBIT
+
+  """Reembolso de un cobro (compensación de la SAGA)."""
+  REFUND
+
+  """Recarga de saldo."""
+  TOP_UP
+}
+
+input UpdateFeatureFlagInput {
+  enabled: Boolean!
+
+  """Versión esperada (concurrencia optimista); si no coincide → CONFLICT."""
+  expectedVersion: Int
+  key: String!
+}
+
+type UpdateFeatureFlagPayload {
+  change: FeatureFlagChange
+
+  """false si la flag ya tenía ese valor (sin cambio ni auditoría)."""
+  changed: Boolean!
+  flag: FeatureFlag!
+}
+
+"""Identidad de quien usa la consola (claims verificados del token)."""
+type Viewer {
+  """
+  Ambiente del despliegue que responde (APP_ENV); el cliente no puede elegirlo.
+  """
+  environment: Environment!
+
+  """Flota del operador (custom:fleet_id); null para administradores."""
+  fleetId: ID
+  groups: [String!]!
+  isAdmin: Boolean!
+  subject: String!
+}
+
+"""Saldo de la billetera de una flota."""
+type Wallet {
+  balance: Money!
+  fleetId: ID!
+  updatedAt: DateTime!
+}

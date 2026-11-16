@@ -69,7 +69,7 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0012](../adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md) | EKS por ambiente, Kustomize y acceso a Floci | Aceptado |
 | [0013](../adr/0013-canary-argo-rollouts-analisis-cloudwatch.md) | Canary con Argo Rollouts y análisis en CloudWatch | Reemplazado por 0032 |
 | [0014](../adr/0014-observabilidad-cloudwatch-fluent-bit-prefect.md) | Observabilidad: CloudWatch, Fluent Bit y Prefect | Aceptado |
-| [0015](../adr/0015-cicd-github-actions-hibrido-y-promocion.md) | CI/CD híbrido y promoción entre ramas | Propuesto (P-21, P-22) |
+| [0015](../adr/0015-cicd-github-actions-hibrido-y-promocion.md) | CI/CD híbrido y promoción entre ramas | Reemplazado en parte por 0035 |
 | [0016](../adr/0016-estrategia-de-pruebas.md) | Estrategia de pruebas | Aceptado |
 | [0017](../adr/0017-frontend-spa-mismo-origen-polling.md) | Frontend SPA, mismo origen y polling | Aceptado |
 | [0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md) | Toolchain del monorepo: pnpm, Node 26, TypeScript 6 y calidad | Aceptado |
@@ -89,5 +89,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0032](../adr/0032-canary-argo-rollouts-traefik-cloudwatch.md) | Canary de graphql-api con Argo Rollouts, reparto por peso en Traefik y análisis en CloudWatch | Aceptado |
 | [0033](../adr/0033-terraform-modular-backend-s3-floci.md) | Terraform modular, backend S3 con bloqueo nativo, workspaces y destino Floci aislado | Aceptado |
 | [0034](../adr/0034-red-eks-api-gateway-terraform-floci.md) | Red, EKS y API Gateway en Terraform: qué se despliega, por qué y qué demuestra Floci | Aceptado |
+| [0035](../adr/0035-cicd-github-actions-runners-hospedados-floci-efimero.md) | CI/CD con GitHub Actions en runners hospedados y Floci efímero | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

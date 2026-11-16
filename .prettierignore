@@ -15,3 +15,6 @@ infra/local/floci/data/
 
 # Python (Prefect) usa su propio formateador.
 prefect/
+
+# Generado por apps/graphql-api/scripts/schema.ts (printSchema de graphql-js): no se reformatea.
+apps/graphql-api/schema.graphql

@@ -1,6 +1,6 @@
 # ADR-0015: CI/CD con GitHub Actions híbrido (hospedado + self-hosted), rulesets y promoción lineal con merge commit
 
-- **Estado:** Propuesto. Pendiente de confirmar la visibilidad del repositorio (P-21) y el destino de `main` (P-22).
+- **Estado:** Reemplazado en parte por [ADR-0035](0035-cicd-github-actions-runners-hospedados-floci-efimero.md) (2026-11-15): solo runners hospedados con Floci efímero (repositorio público, sin self-hosted). Siguen vigentes las ramas, `promotion-guard`, los métodos de merge y la concurrencia por ambiente
 - **Fecha:** 2026-11-12
 
 ## Contexto
