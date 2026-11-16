@@ -1,6 +1,6 @@
 # ADR-0012: Un clúster EKS por ambiente, manifiestos con Kustomize y acceso de los pods a Floci
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. El clúster lo declara el módulo `eks` de Terraform, e IRSA o Pod Identity se resolvió a favor de **Pod Identity** ([ADR-0033](0033-terraform-modular-backend-s3-floci.md))
 - **Fecha:** 2026-11-12
 
 ## Contexto

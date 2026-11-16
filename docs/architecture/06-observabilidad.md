@@ -44,7 +44,7 @@ Decisión y verificación: [ADR-0029](../adr/0029-cloudwatch-fluent-bit-log-grou
   - un log stream por pod;
   - la línea JSON original (`log_key: log`);
   - si un pod de AegisVolt no tiene nombre, a `/aegisvolt/<env>/unclassified`.
-- Los log groups los crea **Terraform** (`infra/terraform/modules/observability`, workspaces `dev`/`test`/`prod`) con retención de 7, 14 y 30 días. Fluent Bit no los auto-crea.
+- Los log groups los crea **Terraform** (`infra/terraform/modules/cloudwatch`, workspaces `dev`/`test`/`prod`) con retención de 7, 14 y 30 días. Fluent Bit no los auto-crea.
 - **Local:** el componente `infra/k8s/components/floci` envía a Floci por **HTTPS** (Service `floci` sin selector, certificado validado con la CA local de Floci). El plugin no admite HTTP, así que Floci corre con `FLOCI_TLS_ENABLED=true`.
 - **Verificado de punta a punta** con `scripts/floci/logging-k8s-verify.sh`: clúster EKS de Floci, cinco servicios, respaldo, pods ajenos descartados, métricas y alarma. La alternativa `CloudWatchLogSink` de ADR-0014 ya no es necesaria.
 

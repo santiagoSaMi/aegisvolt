@@ -4,13 +4,14 @@
 #
 # Uso: scripts/floci/bootstrap-env.sh <local|dev|test|prod>
 #
+# - local: crea si faltan las tablas aegisvolt-{reservations,billing,dispatch,sagas}-local y
+#   aegisvolt-feature-flags-local (con el valor inicial de cada flag).
+# - dev/test/prod: comprueba que existan (las crea Terraform, ADR-0033).
 # Crea si faltan:
-#   - tablas aegisvolt-{reservations,billing,dispatch,sagas}-<env> y aegisvolt-feature-flags-<env>
-#     (con el valor inicial de cada flag para ese ambiente);
 #   - User Pool aegisvolt-<env> (atributo custom:fleet_id), app client público, grupos
 #     fleet-operators/platform-admins y dos usuarios de demostración.
 # Escribe infra/local/floci/.tmp/identity-<env>.env (0600) con el pool, el client y la
-# contraseña FICTICIA de los usuarios de demostración. En AWS real todo esto es de Terraform.
+# contraseña FICTICIA de los usuarios de demostración. Cognito sigue fuera de Terraform (L-13).
 source "$(dirname "$0")/lib.sh"
 
 ENV="${1:-}"
@@ -31,10 +32,19 @@ declare -A TABLES=(
   [energy-dispatch]="aegisvolt-dispatch-${ENV}"
   [saga-orchestrator]="aegisvolt-sagas-${ENV}"
 )
-for service in "${!TABLES[@]}"; do
-  (cd "${REPO_ROOT}/services/${service}" && DYNAMODB_TABLE_NAME="${TABLES[$service]}" node scripts/create-local-table.ts) | sed 's/^/  /'
-done
-(cd "${REPO_ROOT}/packages/feature-flags" && node scripts/create-local-table.ts "$ENV") | sed 's/^/  /'
+if [[ "$ENV" == local ]]; then
+  # Ambiente local (docker compose): fuera de Terraform; tablas con el script de cada servicio.
+  for service in "${!TABLES[@]}"; do
+    (cd "${REPO_ROOT}/services/${service}" && DYNAMODB_TABLE_NAME="${TABLES[$service]}" node scripts/create-local-table.ts) | sed 's/^/  /'
+  done
+  (cd "${REPO_ROOT}/packages/feature-flags" && node scripts/create-local-table.ts "$ENV") | sed 's/^/  /'
+else
+  # dev/test/prod: las tablas y la semilla de flags son de Terraform (ADR-0033).
+  for table in "${TABLES[@]}" "aegisvolt-feature-flags-${ENV}"; do
+    aws dynamodb describe-table --table-name "$table" >/dev/null 2>&1 \
+      || die "No existe la tabla ${table}: scripts/floci/terraform-live.sh ${ENV} apply"
+  done
+fi
 log_ok "Tablas de ${ENV} listas"
 
 # --- Cognito ----------------------------------------------------------------------------

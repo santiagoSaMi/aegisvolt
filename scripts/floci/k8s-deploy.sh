@@ -6,10 +6,12 @@
 #   --no-smoke        no ejecuta la prueba de humo final
 #   --no-wait-canary  no espera a que el canary de graphql-api termine (Argo Rollouts)
 #
-# Pasos (idempotentes): imágenes con tag inmutable → ECR de Floci → clúster aegisvolt-<env>
-# → tablas y Cognito del ambiente → kustomize (overlay + imágenes del commit) → rollout
-# → prueba de humo (salud, login real con Cognito vía la web, consulta GraphQL).
-# Requiere `scripts/floci/terraform-live.sh <env> apply` (log groups de CloudWatch).
+# Pasos (idempotentes): imágenes con tag inmutable → push al ECR de Floci → kubeconfig del
+# clúster aegisvolt-<env> → Cognito del ambiente → kustomize (overlay + imágenes del
+# commit) → rollout → prueba de humo (salud, login real con Cognito vía la web, GraphQL).
+# La infraestructura es de Terraform (ADR-0033) y debe existir antes:
+#   scripts/floci/terraform-global.sh apply      (repositorios ECR)
+#   scripts/floci/terraform-live.sh <env> apply  (red, tablas, IAM, clúster EKS, log groups)
 # Nunca destruye nada; para borrar el clúster ver docs/runbooks/k8s-floci.md.
 source "$(dirname "$0")/lib.sh"
 
@@ -59,8 +61,9 @@ log_ok "Imágenes aegisvolt/*:${TAG}"
 # --- 2. ECR de Floci ------------------------------------------------------------------------
 aws ecr get-login-password | docker login --username AWS --password-stdin localhost:4566 >/dev/null
 for app in "${APPS[@]}"; do
+  # Repositorios de Terraform (infra/terraform/global, módulo ecr).
   aws ecr describe-repositories --repository-names "aegisvolt/${app}" >/dev/null 2>&1 \
-    || aws ecr create-repository --repository-name "aegisvolt/${app}" --image-tag-mutability IMMUTABLE >/dev/null
+    || die "No existe el repositorio aegisvolt/${app}: scripts/floci/terraform-global.sh apply"
   if aws ecr describe-images --repository-name "aegisvolt/${app}" --image-ids "imageTag=${TAG}" >/dev/null 2>&1; then
     continue  # tag inmutable ya publicado
   fi
@@ -70,15 +73,9 @@ done
 log_ok "Imágenes en ECR (${REGISTRY}/aegisvolt/*:${TAG})"
 
 # --- 3. Clúster EKS (k3s) ---------------------------------------------------------------
-if ! aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1; then
-  log_info "Creando el clúster ${CLUSTER}"
-  ROLE_ARN="$(aws iam get-role --role-name "${CLUSTER}-cluster" --query Role.Arn --output text 2>/dev/null \
-    || aws iam create-role --role-name "${CLUSTER}-cluster" --query Role.Arn --output text \
-         --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"eks.amazonaws.com"},"Action":"sts:AssumeRole"}]}')"
-  SUBNETS="$(aws ec2 describe-subnets --filters Name=default-for-az,Values=true --query 'Subnets[0:2].SubnetId' --output text | tr '\t' ',')"
-  aws eks create-cluster --name "$CLUSTER" --kubernetes-version 1.36 --role-arn "$ROLE_ARN" \
-    --resources-vpc-config "subnetIds=${SUBNETS}" >/dev/null
-fi
+# El clúster es de Terraform (módulo eks, ADR-0033): este script no lo crea.
+aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1 \
+  || die "No existe el clúster ${CLUSTER}. Créelo con Terraform: scripts/floci/terraform-live.sh ${ENV} apply (eks.enabled=true en envs/${ENV}.tfvars)"
 for _ in $(seq 1 60); do
   [[ "$(aws eks describe-cluster --name "$CLUSTER" --query cluster.status --output text)" == ACTIVE ]] && break
   sleep 5
@@ -103,6 +100,21 @@ k apply --server-side --force-conflicts -f "${STATE}/platform.yaml" >/dev/null
 k -n argo-rollouts rollout status deploy/argo-rollouts --timeout=300s >/dev/null
 k -n traefik rollout status deploy/traefik --timeout=300s >/dev/null
 log_ok "Plataforma: Argo Rollouts v1.10.1 y Traefik v3.7.16"
+
+# --- 3c. Target del NLB interno (ADR-0034) ------------------------------------------------
+# En AWS lo registra el AWS Load Balancer Controller (IPs de los pods de Traefik). En Floci,
+# el NLB vive en el contenedor de Floci y alcanza al contenedor k3s por la red Docker: se
+# registra su IP con el NodePort de Traefik y se quitan targets obsoletos (cambio de IP, L-10).
+TG_ARN="$(aws elbv2 describe-target-groups --names "aegisvolt-${ENV}-ingress" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null)" \
+  || die "No existe el target group aegisvolt-${ENV}-ingress: scripts/floci/terraform-live.sh ${ENV} apply"
+NODE_PORT="$(sed -n 's/^ingress_target_port *= *\([0-9]*\).*/\1/p' "${REPO_ROOT}/infra/terraform/live/config/floci/target.tfvars")"
+K3S_IP="$(docker inspect -f '{{(index .NetworkSettings.Networks "aegisvolt-floci").IPAddress}}' "floci-aws-eks-${CLUSTER}")"
+for stale in $(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
+    --query "TargetHealthDescriptions[?Target.Id!='${K3S_IP}'].Target.Id" --output text); do
+  aws elbv2 deregister-targets --target-group-arn "$TG_ARN" --targets "Id=${stale},Port=${NODE_PORT}"
+done
+aws elbv2 register-targets --target-group-arn "$TG_ARN" --targets "Id=${K3S_IP},Port=${NODE_PORT}"
+log_ok "NLB aegisvolt-${ENV}-ingress → ${K3S_IP}:${NODE_PORT} (NodePort de Traefik)"
 
 # --- 4. Datos e identidad del ambiente ---------------------------------------------------
 "${REPO_ROOT}/scripts/floci/bootstrap-env.sh" "$ENV" >/dev/null

@@ -30,3 +30,18 @@ patches:
         value:
           - secretRef:
               name: floci-aws
+  # Entrada desde el NLB de Floci (ADR-0034): el listener del NLB vive en el contenedor de
+  # Floci y reenvía al contenedor k3s (target ip) en este NodePort fijo, que es el
+  # ingress_target_port de infra/terraform/live/config/floci/target.tfvars. En AWS el
+  # Service sigue siendo ClusterIP y el NLB apunta a las IPs de los pods de Traefik.
+  - target:
+      kind: Service
+      name: traefik
+      namespace: traefik
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080

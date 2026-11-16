@@ -1,0 +1,20 @@
+{
+  "$comment": "Catálogo de flags para la semilla de Terraform. Debe coincidir con packages/feature-flags/src/catalog.ts (lo comprueba packages/feature-flags/test/terraform-catalog.test.ts).",
+  "flags": [
+    {
+      "key": "ENABLE_DYNAMIC_SURGE_PRICING",
+      "description": "Aplica el multiplicador de tarifa dinámica en las ventanas pico configuradas (billing-wallet).",
+      "initial": { "dev": true, "test": true, "prod": false }
+    },
+    {
+      "key": "ENABLE_FAST_CHARGE_BOOST",
+      "description": "Permite reservas con fastChargeBoost: conectores ultra rápidos (≥ 150 kW) y hold extendido (station-reservation, P-14).",
+      "initial": { "dev": true, "test": false, "prod": false }
+    },
+    {
+      "key": "SIMULATE_CHARGER_HARDWARE_FAULT",
+      "description": "Fuerza una falla física simulada (E-HW-001) al activar el cargador para demostrar la compensación de la SAGA (energy-dispatch).",
+      "initial": { "dev": false, "test": true, "prod": false }
+    }
+  ]
+}

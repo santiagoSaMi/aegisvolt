@@ -1,78 +1,28 @@
-# Bootstrap del estado remoto (ADR-0011): bucket S3 versionado para el estado de
-# `live/`. Usa estado LOCAL (no puede guardarse en el bucket que crea) y se
-# aplica una sola vez por cuenta. En local apunta SIEMPRE a Floci.
+# Bootstrap del estado remoto (ADR-0011, ADR-0033): el bucket S3 que guarda el estado de
+# live/ (env:/<workspace>/...), de global/ y de este mismo bootstrap.
+#
+# Problema del huevo y la gallina: el bucket no existe cuando este código se aplica por
+# primera vez. scripts/floci/terraform-bootstrap.sh lo aplica entonces con estado local
+# y después migra ese estado al bucket (terraform init -migrate-state).
 
-terraform {
-  required_version = ">= 1.10.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.73"
-    }
-  }
-}
-
-variable "floci_endpoint" {
-  description = "Endpoint de Floci. Solo se aceptan endpoints locales."
-  type        = string
-  default     = "http://localhost:4566"
-
-  validation {
-    condition     = can(regex("^http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?$", var.floci_endpoint))
-    error_message = "floci_endpoint debe ser local (http://localhost:<puerto>). No se permite AWS real."
-  }
-}
-
-variable "state_bucket" {
-  description = "Nombre del bucket del estado remoto."
-  type        = string
-  default     = "aegisvolt-tfstate"
-}
-
-provider "aws" {
-  region = "us-east-1"
-
-  # Credenciales FICTICIAS, solo válidas en Floci.
-  access_key                  = "test"
-  secret_key                  = "test"
-  skip_credentials_validation = true
-  skip_metadata_api_check     = true
-  skip_requesting_account_id  = true
-  s3_use_path_style           = true
-
-  endpoints {
-    s3  = var.floci_endpoint
-    sts = var.floci_endpoint
-  }
-
-  default_tags {
-    tags = {
-      Project   = "aegisvolt"
-      ManagedBy = "terraform"
-      Purpose   = "tfstate"
-    }
-  }
-}
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
 resource "aws_s3_bucket" "state" {
   bucket = var.state_bucket
+
+  # El historial de estados de los tres ambientes vive aquí.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-# Versionado obligatorio: permite recuperar cualquier versión previa del estado.
+# Versionado: cada escritura del estado conserva la anterior (restauración, §6.1).
 resource "aws_s3_bucket_versioning" "state" {
   bucket = aws_s3_bucket.state.id
   versioning_configuration {
     status = "Enabled"
   }
-}
-
-resource "aws_s3_bucket_public_access_block" "state" {
-  bucket                  = aws_s3_bucket.state.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
@@ -84,6 +34,103 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   }
 }
 
-output "state_bucket" {
-  value = aws_s3_bucket.state.bucket
+resource "aws_s3_bucket_public_access_block" "state" {
+  bucket                  = aws_s3_bucket.state.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Sin ACLs: el acceso lo deciden solo las políticas.
+resource "aws_s3_bucket_ownership_controls" "state" {
+  bucket = aws_s3_bucket.state.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+# Política mínima compatible con Floci (que la guarda pero no la evalúa sin
+# FLOCI_SERVICES_S3_ENFORCE_AUTH, L-12):
+# - solo la propia cuenta, y solo por TLS;
+# - nadie borra el bucket ni desactiva su versionado por API.
+data "aws_iam_policy_document" "state" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  statement {
+    sid       = "DenyOtherAccounts"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:PrincipalAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  statement {
+    sid       = "ProtectBucketAndHistory"
+    effect    = "Deny"
+    actions   = ["s3:DeleteBucket", "s3:PutBucketVersioning", "s3:PutLifecycleConfiguration"]
+    resources = [aws_s3_bucket.state.arn]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    # Solo el rol de administración de Terraform (en AWS real) puede cambiarlos.
+    condition {
+      test     = "StringNotLike"
+      variable = "aws:PrincipalArn"
+      values   = ["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aegisvolt-terraform-admin"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "state" {
+  bucket = aws_s3_bucket.state.id
+  policy = data.aws_iam_policy_document.state.json
+
+  # La política se aplica después del bloqueo de acceso público (que no la considera pública).
+  depends_on = [aws_s3_bucket_public_access_block.state]
+}
+
+# Retención de versiones anteriores: N días, conservando siempre las 10 más recientes.
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    id     = "state-history"
+    status = "Enabled"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days           = var.noncurrent_version_retention_days
+      newer_noncurrent_versions = 10
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.state]
 }
