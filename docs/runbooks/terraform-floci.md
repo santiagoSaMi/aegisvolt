@@ -180,6 +180,41 @@ scripts/floci/terraform-live.sh dev                                # 5. el plan 
 3. Ejecuta `scripts/floci/terraform-live.sh <env>`: el plan agrega el clúster, el node group, el addon y 7 asociaciones.
 4. Si el plan es el esperado, `scripts/floci/terraform-live.sh <env> apply`.
 
+## 6. Cambios de red que recrean recursos
+
+Al agregar un SG al NLB interno, Terraform debe recrearlo: AWS no permite asociar SG a un NLB creado sin ellos. Ocurrió lo mismo al retirar VPCE y al renombrar rutas (ADR-0034). Se aplicó por pasos:
+
+1. **Revisar la lista exacta** de destrucciones: `terraform show -json <plan> | jq '.resource_changes[] | select(.change.actions | index("delete")) | .address'`. Solo se usa `--allow-destroy` si cada una tiene motivo.
+2. **Renombres:** bloque `moved` en el módulo (`proxy["public"]` → `route["public-spa"]`). Si se aplica con `-target`, Terraform exige hacer antes el movimiento con `terraform state mv` (es equivalente; el bloque queda como no-op).
+3. **Red primero:** `plan -target=module.network`, revisar y aplicar.
+4. **NLB → VPC Link aparte:** `plan -target=…aws_api_gateway_vpc_link.this -target=…aws_lb_listener.ingress`. En el apply completo, el `create_before_destroy` del deployment de API Gateway se propaga a sus dependencias y produce:
+   - un **ciclo** con la destrucción de los VPCE hermanos;
+   - un **choque de nombre**: Terraform intenta crear el NLB nuevo `aegisvolt-<env>-ingress` antes de borrar el viejo.
+5. **Resto:** `scripts/floci/terraform-live.sh <env> apply --allow-destroy` (solo deployments y la ruta privada antigua) y un último plan **sin cambios**.
+
+## 7. Verificación de red, EKS y API Gateway
+
+```bash
+scripts/floci/network-verify.sh dev    # tabla requisito / implementación / evidencia / limitación
+scripts/floci/network-verify.sh test
+scripts/floci/network-verify.sh prod
+```
+
+- Informe: `infra/local/floci/.tmp/network-verify-<env>.md`.
+- Cada fila dice si es **funcional** (Floci ejecuta el comportamiento) o **metadatos** (Floci solo guarda la configuración).
+- La prueba de punta a punta (`POST /graphql` por HTTPS) requiere el clúster y el target del NLB, que registra `k8s-deploy.sh`. Hoy solo es posible en `dev` (L-11).
+
+Prueba manual equivalente:
+
+```bash
+API=$(aws apigateway get-rest-apis --query "items[?name=='aegisvolt-dev-public'].id" --output text)
+TOKEN=$(aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH --client-id "$COGNITO_CLIENT_ID" \
+  --auth-parameters "USERNAME=operador,PASSWORD=$DEMO_PASSWORD" --query AuthenticationResult.IdToken --output text)
+curl --cacert infra/local/floci/data/tls/floci-root-ca.crt "https://${API}.execute-api.localhost.floci.io:4566/dev/graphql" \
+  -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{"query":"{ viewer { fleetId } }"}'
+terraform -chdir=infra/terraform/live output -raw kubeconfig > /tmp/kubeconfig   # exec aws eks get-token
+```
+
 ## Problemas conocidos
 
 - **Aviso `protocol_version` en `aws_lb_target_group.ingress`:** Floci devuelve el atributo en un target group TCP. Hoy es solo un aviso del provider.

@@ -52,6 +52,17 @@ variable "floci_ingress_host" {
   }
 }
 
+variable "ingress_target_port" {
+  description = "Puerto de los targets del NLB: 8000 (pods de Traefik) en AWS; en Floci, el NodePort de Traefik en el contenedor k3s."
+  type        = number
+  default     = 8000
+
+  validation {
+    condition     = var.ingress_target_port > 0 && var.ingress_target_port < 65536
+    error_message = "ingress_target_port debe ser un puerto TCP válido."
+  }
+}
+
 # --- Ambiente (envs/<env>.tfvars) ----------------------------------------------------------------
 
 variable "environment" {

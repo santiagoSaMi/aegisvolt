@@ -52,6 +52,17 @@ variable "control_plane_log_types" {
   default     = ["api", "audit", "authenticator"]
 }
 
+variable "control_plane_log_retention_in_days" {
+  description = "Retención de /aws/eks/<clúster>/cluster (la auditoría crece rápido)."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365], var.control_plane_log_retention_in_days)
+    error_message = "control_plane_log_retention_in_days debe ser un valor admitido por CloudWatch Logs (≤ 365)."
+  }
+}
+
 variable "node_instance_types" {
   description = "Tipos de instancia del node group."
   type        = list(string)
@@ -92,4 +103,32 @@ variable "tags" {
   description = "Etiquetas adicionales."
   type        = map(string)
   default     = {}
+}
+
+variable "ingress_sources" {
+  description = "SGs autorizados a llegar al ingress del clúster (clave = descripción), p. ej. { nlb = <sg del NLB> }."
+  type        = map(string)
+  default     = {}
+}
+
+variable "ingress_port" {
+  description = "Puerto del ingress en los nodos o pods (Traefik: 8000; NodePort en Floci)."
+  type        = number
+  default     = 8000
+
+  validation {
+    condition     = var.ingress_port > 0 && var.ingress_port < 65536
+    error_message = "ingress_port debe ser un puerto TCP válido."
+  }
+}
+
+variable "kubeconfig_exec_env" {
+  description = "Variables de entorno del comando `aws eks get-token` del kubeconfig (en Floci: AWS_ENDPOINT_URL). Sin secretos."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.kubeconfig_exec_env) : !can(regex("(?i)secret|token|password", k))])
+    error_message = "kubeconfig_exec_env no admite secretos: las credenciales vienen del entorno de quien ejecuta kubectl."
+  }
 }

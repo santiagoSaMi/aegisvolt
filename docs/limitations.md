@@ -33,7 +33,7 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
   - Declarar la API `PRIVATE` y su resource policy (`aws:SourceVpce`) en Terraform; se verifica con `get-rest-api` y `get-rest-api --query policy`.
   - El aislamiento efectivo en local lo aplicará Kubernetes: Services `ClusterIP` y NetworkPolicies. Esto se verificará en la fase de K8s.
 
-- **Con Terraform** (2026-11-15, módulo `api-gateway`): Floci 2.4.0 crea la API `PRIVATE`, asociada al VPCE `execute-api` y con su resource policy `aws:SourceVpce`. Esto contradice la documentación de Floci, que dice que la rechaza. También crea el NLB interno, el VPC Link `AVAILABLE` y las integraciones `HTTP_PROXY` por `VPC_LINK`.
+- **Con Terraform** (2026-11-15, módulo `api-gateway`; re-verificado con `network-verify.sh`, que invoca `POST /graphql` de la API PRIVATE desde el host y obtiene 200): Floci 2.4.0 crea la API `PRIVATE`, asociada al VPCE `execute-api` y con su resource policy `aws:SourceVpce`. Esto contradice la documentación de Floci, que dice que la rechaza. También crea el NLB interno, el VPC Link `AVAILABLE` y las integraciones `HTTP_PROXY` por `VPC_LINK`.
 
 ## L-03 · EKS es k3s, no EKS administrado
 
@@ -184,4 +184,16 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Requisito:** §2.4 — "toda la infraestructura... en módulos de Terraform".
 - **Estado:** el User Pool, el app client, los grupos y los usuarios de demostración los crea `scripts/floci/bootstrap-env.sh`. Esta fase migró a Terraform lo que pedía el alcance (DynamoDB, red, EKS, API Gateway, IAM, CloudWatch y ECR). Cognito no estaba en esa lista.
 - **Propuesta:** un módulo `identity` (`aws_cognito_user_pool`, `aws_cognito_user_pool_client` y `aws_cognito_user_group`) con adopción por import del pool existente. Los usuarios de demostración, con contraseña, seguirían fuera del estado para no guardar secretos en él.
+
+## L-14 · API Gateway, ELB y EC2 de Floci: lo que no se emula o se reporta distinto
+
+- **Requisito:** §2.4 y la fase de red — endpoint HTTPS, logs, SG mínimos y verificación servicio por servicio.
+- **Comportamiento observado** (Floci 2.4.0, 2026-11-15, `scripts/floci/network-verify.sh`):
+  - **Logs de acceso y métricas de API Gateway:** el stage tiene `access_log_settings` y el log group `/aegisvolt/<env>/api-gateway` existe, pero Floci no escribe eventos (0 streams). Tampoco publica métricas `AWS/ApiGateway`.
+  - **HTTP en `execute-api`:** Floci acepta HTTP y HTTPS. En AWS el endpoint de API Gateway solo admite HTTPS. La evidencia usa HTTPS, verificando el certificado con la CA local de Floci.
+  - **`enforce_security_group_inbound_rules_on_private_link_traffic`:** Floci no devuelve el atributo del NLB, lo que daría una diferencia permanente en el plan. El módulo lo fija al crear el NLB y lo ignora después (`ignore_changes`, solo ese atributo).
+  - **`describe-security-group-rules`** sigue listando la regla de egreso `0.0.0.0/0` por defecto que Terraform revoca al crear el SG, mientras que `describe-security-groups` (y el estado) muestran solo las reglas declaradas. La verificación usa `describe-security-groups`.
+  - **Aviso `protocol_version`** del provider en el target group TCP: lo devuelve Floci.
+- **Lo que sí funciona:** el camino API Gateway (HTTPS) → VPC Link → listener del NLB → contenedor k3s:NodePort → Traefik → pod, el health check HTTP del target group y los logs del plano de control de EKS.
+- **En AWS real:** los logs de acceso de API Gateway requieren el rol de cuenta de `global/` (`aws_api_gateway_account`), ya declarado.
 

@@ -101,6 +101,21 @@ k -n argo-rollouts rollout status deploy/argo-rollouts --timeout=300s >/dev/null
 k -n traefik rollout status deploy/traefik --timeout=300s >/dev/null
 log_ok "Plataforma: Argo Rollouts v1.10.1 y Traefik v3.7.16"
 
+# --- 3c. Target del NLB interno (ADR-0034) ------------------------------------------------
+# En AWS lo registra el AWS Load Balancer Controller (IPs de los pods de Traefik). En Floci,
+# el NLB vive en el contenedor de Floci y alcanza al contenedor k3s por la red Docker: se
+# registra su IP con el NodePort de Traefik y se quitan targets obsoletos (cambio de IP, L-10).
+TG_ARN="$(aws elbv2 describe-target-groups --names "aegisvolt-${ENV}-ingress" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null)" \
+  || die "No existe el target group aegisvolt-${ENV}-ingress: scripts/floci/terraform-live.sh ${ENV} apply"
+NODE_PORT="$(sed -n 's/^ingress_target_port *= *\([0-9]*\).*/\1/p' "${REPO_ROOT}/infra/terraform/live/config/floci/target.tfvars")"
+K3S_IP="$(docker inspect -f '{{(index .NetworkSettings.Networks "aegisvolt-floci").IPAddress}}' "floci-aws-eks-${CLUSTER}")"
+for stale in $(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
+    --query "TargetHealthDescriptions[?Target.Id!='${K3S_IP}'].Target.Id" --output text); do
+  aws elbv2 deregister-targets --target-group-arn "$TG_ARN" --targets "Id=${stale},Port=${NODE_PORT}"
+done
+aws elbv2 register-targets --target-group-arn "$TG_ARN" --targets "Id=${K3S_IP},Port=${NODE_PORT}"
+log_ok "NLB aegisvolt-${ENV}-ingress → ${K3S_IP}:${NODE_PORT} (NodePort de Traefik)"
+
 # --- 4. Datos e identidad del ambiente ---------------------------------------------------
 "${REPO_ROOT}/scripts/floci/bootstrap-env.sh" "$ENV" >/dev/null
 IDENTITY="${FLOCI_TMP_DIR}/identity-${ENV}.env"

@@ -24,10 +24,10 @@ Cada raíz tiene:
 | Módulo | Recursos |
 | --- | --- |
 | `dynamodb-table` | Tabla PK/SK con GSIs, TTL, PITR y protección contra borrado |
-| `network` | VPC, subredes públicas y privadas (2–3 AZ), IGW, NAT, rutas, VPCE Gateway (S3, DynamoDB) e Interface (CloudWatch, API Gateway, EKS, ECR, STS, ELB) |
+| `network` | VPC, subredes públicas y privadas (2–3 AZ), IGW, NAT, rutas, VPCE Gateway (S3, DynamoDB) e Interface (`logs`, `monitoring`, `ecr.api`, `ecr.dkr`, `execute-api`, `eks-auth`; cada uno con su consumidor, [ADR-0034](../../docs/adr/0034-red-eks-api-gateway-terraform-floci.md)) |
 | `iam` | Rol de mínimo privilegio por ServiceAccount (EKS Pod Identity) |
-| `eks` | Clúster, node group, roles, addon y asociaciones de Pod Identity |
-| `api-gateway` | NLB interno, VPC Link, API REST REGIONAL y PRIVATE (`aws:SourceVpce`), stage con logs y throttling |
+| `eks` | Clúster, node group, roles, addon, asociaciones de Pod Identity, log group del plano de control, regla del SG del clúster desde el NLB y salida `kubeconfig` |
+| `api-gateway` | NLB interno con SG (solo VPC Link), VPC Link V1, API REST REGIONAL (`POST /graphql` + SPA) y PRIVATE (`POST /graphql`, `aws:SourceVpce`), stage HTTPS con logs y throttling |
 | `cloudwatch` | Log groups `/aegisvolt/<env>/<servicio>`, metric filters, alarmas y dashboard ([ADR-0029](../../docs/adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)) |
 | `ecr` | Repositorios inmutables con escaneo y retención |
 
@@ -40,6 +40,7 @@ scripts/floci/terraform-live.sh dev            # fmt, init, workspace dev, valid
 scripts/floci/terraform-live.sh dev apply      # aplica ese plan (igual con test y prod)
 scripts/floci/terraform-adopt.sh <global|env>  # una vez: importa lo creado antes por scripts
 scripts/floci/terraform-evidence.sh            # evidencias de workspaces, estados, versiones y lock
+scripts/floci/network-verify.sh <env>          # red, EKS y API Gateway: requisito/implementación/evidencia/limitación
 ```
 
 - Los scripts rechazan los planes que destruyen o reemplazan recursos. Ninguno ejecuta `destroy`.

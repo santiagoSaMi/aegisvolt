@@ -38,3 +38,8 @@ output "execute_api_endpoint_id" {
 output "endpoints_security_group_id" {
   value = aws_security_group.endpoints.id
 }
+
+output "private_subnet_cidrs" {
+  description = "CIDR de cada subred privada (origen o destino de las reglas de SG)."
+  value       = [for s in aws_subnet.private : s.cidr_block]
+}

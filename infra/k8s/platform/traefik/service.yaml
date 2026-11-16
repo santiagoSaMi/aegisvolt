@@ -1,4 +1,5 @@
-# Entrada HTTP del clúster (en AWS real la expondría un NLB; en local, port-forward).
+# Entrada HTTP del clúster. En AWS: target del NLB interno (IPs de los pods, ADR-0034).
+# En Floci: NodePort 30080 (platform/local), target del NLB de Floci.
 apiVersion: v1
 kind: Service
 metadata:

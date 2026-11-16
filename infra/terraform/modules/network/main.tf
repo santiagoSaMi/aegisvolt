@@ -168,22 +168,25 @@ resource "aws_vpc_endpoint" "s3" {
 
 resource "aws_security_group" "endpoints" {
   name        = "${local.name}-vpce"
-  description = "Interface VPC endpoints: HTTPS desde la VPC del ambiente"
+  description = "Interface VPC endpoints: HTTPS desde la VPC del ambiente" # cambiarla recrea el SG
   vpc_id      = aws_vpc.this.id
   tags        = merge(var.tags, { Name = "${local.name}-vpce" })
 }
 
+# Solo las subredes privadas (nodos y pods) llaman a los servicios por los VPCE.
 resource "aws_vpc_security_group_ingress_rule" "endpoints_https" {
+  for_each = local.private_subnets
+
   security_group_id = aws_security_group.endpoints.id
-  description       = "HTTPS desde la VPC"
-  cidr_ipv4         = aws_vpc.this.cidr_block
+  description       = "HTTPS desde la subred privada ${each.key}"
+  cidr_ipv4         = each.value
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
 }
 
-# Interface: CloudWatch (logs, monitoring), API Gateway (execute-api), Kubernetes (eks),
-# ECR, STS y ELB. Una ENI por subred privada y DNS privado: los SDK no cambian de URL.
+# Interface: ver var.interface_endpoints (cada uno con su consumidor). Una ENI por subred
+# privada y DNS privado: el nombre público del servicio resuelve a esas IPs.
 resource "aws_vpc_endpoint" "interface" {
   for_each = toset(var.interface_endpoints)
 

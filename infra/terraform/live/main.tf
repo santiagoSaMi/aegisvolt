@@ -141,17 +141,24 @@ module "eks" {
   source = "../modules/eks"
   count  = var.eks.enabled ? 1 : 0
 
-  cluster_name              = local.name
-  kubernetes_version        = var.eks.kubernetes_version
-  subnet_ids                = module.network.private_subnet_ids
-  endpoint_public_access    = var.eks.endpoint_public_access
-  public_access_cidrs       = var.eks.public_access_cidrs
-  node_instance_types       = var.eks.node_instance_types
-  node_min_size             = var.eks.node_min_size
-  node_desired_size         = var.eks.node_desired_size
-  node_max_size             = var.eks.node_max_size
-  pod_identity_associations = module.iam.pod_identity_associations
-  tags                      = local.tags
+  cluster_name                        = local.name
+  kubernetes_version                  = var.eks.kubernetes_version
+  control_plane_log_retention_in_days = var.observability.retention_in_days
+  subnet_ids                          = module.network.private_subnet_ids
+  endpoint_public_access              = var.eks.endpoint_public_access
+  public_access_cidrs                 = var.eks.public_access_cidrs
+  node_instance_types                 = var.eks.node_instance_types
+  node_min_size                       = var.eks.node_min_size
+  node_desired_size                   = var.eks.node_desired_size
+  node_max_size                       = var.eks.node_max_size
+  pod_identity_associations           = module.iam.pod_identity_associations
+
+  # El NLB interno es el único origen autorizado hacia el ingress del clúster.
+  ingress_sources     = { nlb = module.api_gateway.nlb_security_group_id }
+  ingress_port        = var.ingress_target_port
+  kubeconfig_exec_env = local.floci ? { AWS_ENDPOINT_URL = var.floci_endpoint } : {}
+
+  tags = local.tags
 }
 
 # --- Entrada: API Gateway → VPC Link → NLB interno --------------------------------------------------
@@ -161,7 +168,9 @@ module "api_gateway" {
   environment                 = local.environment
   vpc_id                      = module.network.vpc_id
   private_subnet_ids          = module.network.private_subnet_ids
+  private_subnet_cidrs        = module.network.private_subnet_cidrs
   listener_port               = var.api.listener_port
+  target_port                 = var.ingress_target_port
   integration_base_url        = var.floci_ingress_host == null ? null : "http://${var.floci_ingress_host}:${var.api.listener_port}"
   execute_api_vpc_endpoint_id = module.network.execute_api_endpoint_id
   throttling_rate_limit       = var.api.throttling_rate_limit

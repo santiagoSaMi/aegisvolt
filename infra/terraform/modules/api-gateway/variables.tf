@@ -23,6 +23,16 @@ variable "private_subnet_ids" {
   }
 }
 
+variable "private_subnet_cidrs" {
+  description = "CIDR de las subredes privadas: destino del egreso del NLB hacia el ingress."
+  type        = list(string)
+
+  validation {
+    condition     = alltrue([for c in var.private_subnet_cidrs : can(cidrhost(c, 0))])
+    error_message = "private_subnet_cidrs debe contener CIDRs válidos."
+  }
+}
+
 variable "listener_port" {
   description = "Puerto del listener del NLB."
   type        = number
@@ -30,7 +40,7 @@ variable "listener_port" {
 }
 
 variable "target_port" {
-  description = "Puerto del ingress del clúster en los targets ip (Traefik)."
+  description = "Puerto del ingress en los targets ip: 8000 (pods de Traefik) en AWS; en Floci, el NodePort de Traefik en el contenedor k3s."
   type        = number
   default     = 8000
 }

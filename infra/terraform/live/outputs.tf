@@ -27,12 +27,40 @@ output "eks_cluster_name" {
   value = try(module.eks[0].cluster_name, null)
 }
 
+output "eks_cluster_endpoint" {
+  description = "Endpoint del plano de control (API server de Kubernetes)."
+  value       = try(module.eks[0].cluster_endpoint, null)
+}
+
+output "eks_endpoint_access" {
+  value = try(module.eks[0].endpoint_access, null)
+}
+
+output "eks_cluster_security_group_id" {
+  value = try(module.eks[0].cluster_security_group_id, null)
+}
+
+output "kubeconfig" {
+  description = "kubeconfig sin secretos (exec: aws eks get-token)."
+  value       = try(module.eks[0].kubeconfig, null)
+}
+
 output "workload_role_arns" {
   value = module.iam.role_arns
 }
 
 output "api_invoke_urls" {
-  value = module.api_gateway.invoke_urls
+  description = "Endpoints HTTPS de API Gateway (stage del ambiente)."
+  value       = module.api_gateway.invoke_urls
+}
+
+output "graphql_urls" {
+  description = "GraphQL por API Gateway: public (internet) y private (solo por el VPCE execute-api)."
+  value       = module.api_gateway.graphql_urls
+}
+
+output "nlb_security_group_id" {
+  value = module.api_gateway.nlb_security_group_id
 }
 
 output "api_target_group_arn" {

@@ -1,6 +1,6 @@
 # ADR-0010: Red con API Gateway REST + VPC Link + NLB interno; API PRIVATE vía VPCE `execute-api`; Gateway e Interface VPCE
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. Implementado en Terraform y verificado en Floci por [ADR-0034](0034-red-eks-api-gateway-terraform-floci.md): Traefik como ingress detrás del NLB, VPCE recortados a los que tienen consumidor y JWT validado en graphql-api (sin autorizador de Cognito por ahora)
 - **Fecha:** 2026-11-12
 
 ## Contexto

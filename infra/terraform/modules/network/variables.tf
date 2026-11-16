@@ -42,9 +42,22 @@ variable "single_nat_gateway" {
 }
 
 variable "interface_endpoints" {
-  description = "Servicios con Interface VPC Endpoint (sufijo de com.amazonaws.<región>.)."
+  description = <<-EOT
+    Interface VPC Endpoints (sufijo de com.amazonaws.<región>.). Solo los que tienen un
+    consumidor en la VPC (ADR-0034):
+    - logs: Fluent Bit escribe en CloudWatch Logs;
+    - monitoring: Argo Rollouts lee métricas de CloudWatch (análisis canary);
+    - ecr.api, ecr.dkr: los nodos descargan las imágenes (las capas, por el Gateway de S3);
+    - execute-api: clientes internos invocan la API REST PRIVATE;
+    - eks-auth: el agente de Pod Identity obtiene las credenciales de cada pod.
+  EOT
   type        = list(string)
-  default     = ["logs", "monitoring", "execute-api", "eks", "eks-auth", "ecr.api", "ecr.dkr", "sts", "elasticloadbalancing"]
+  default     = ["logs", "monitoring", "ecr.api", "ecr.dkr", "execute-api", "eks-auth"]
+
+  validation {
+    condition     = alltrue([for e in var.interface_endpoints : contains(["logs", "monitoring", "ecr.api", "ecr.dkr", "execute-api", "eks-auth", "sts", "eks", "elasticloadbalancing"], e)])
+    error_message = "Servicio de Interface VPCE no contemplado: justifíquelo en ADR-0034 antes de añadirlo."
+  }
 }
 
 variable "dynamodb_endpoint_policy_resources" {

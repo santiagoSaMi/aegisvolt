@@ -61,6 +61,14 @@ resource "aws_iam_role_policy_attachment" "node" {
 }
 
 # --- Clúster ----------------------------------------------------------------------------------------
+# Logs del plano de control: EKS los escribe en este grupo. Se declara antes que el clúster
+# para fijar la retención (si no, EKS lo crea sin expiración). Floci también los emite.
+resource "aws_cloudwatch_log_group" "control_plane" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = var.control_plane_log_retention_in_days
+  tags              = var.tags
+}
+
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   version  = var.kubernetes_version
@@ -82,7 +90,7 @@ resource "aws_eks_cluster" "this" {
 
   tags = var.tags
 
-  depends_on = [aws_iam_role_policy_attachment.cluster]
+  depends_on = [aws_iam_role_policy_attachment.cluster, aws_cloudwatch_log_group.control_plane]
 }
 
 resource "aws_eks_node_group" "this" {
@@ -125,4 +133,20 @@ resource "aws_eks_pod_identity_association" "this" {
   tags            = var.tags
 
   depends_on = [aws_eks_addon.pod_identity_agent]
+}
+
+# --- Security groups ------------------------------------------------------------------------------
+# Los nodos de un node group administrado (y los pods, con la VPC CNI) usan el SG del clúster
+# que crea EKS. Solo se añade lo necesario para la entrada: el NLB interno alcanza el puerto
+# del ingress (Traefik). El resto (plano de control ↔ nodos, nodo ↔ nodo) lo gestiona EKS.
+resource "aws_vpc_security_group_ingress_rule" "ingress_from" {
+  for_each = var.ingress_sources
+
+  security_group_id            = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  description                  = "Ingress del cluster desde ${each.key}"
+  referenced_security_group_id = each.value
+  ip_protocol                  = "tcp"
+  from_port                    = var.ingress_port
+  to_port                      = var.ingress_port
+  tags                         = var.tags
 }

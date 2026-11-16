@@ -87,5 +87,7 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0030](../adr/0030-prefect-auditoria-solo-lectura-por-apis.md) | Prefect como auditor de solo lectura a través de las APIs de cada servicio | Aceptado |
 | [0031](../adr/0031-contenedores-kubernetes-floci.md) | Imágenes de contenedor, manifiestos de Kubernetes y desarrollo local con Floci | Aceptado |
 | [0032](../adr/0032-canary-argo-rollouts-traefik-cloudwatch.md) | Canary de graphql-api con Argo Rollouts, reparto por peso en Traefik y análisis en CloudWatch | Aceptado |
+| [0033](../adr/0033-terraform-modular-backend-s3-floci.md) | Terraform modular, backend S3 con bloqueo nativo, workspaces y destino Floci aislado | Aceptado |
+| [0034](../adr/0034-red-eks-api-gateway-terraform-floci.md) | Red, EKS y API Gateway en Terraform: qué se despliega, por qué y qué demuestra Floci | Aceptado |
 
 Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.

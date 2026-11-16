@@ -75,7 +75,7 @@ El criterio de IaC pesa el 30 % de la evaluación. Hasta esta fase solo la obser
 | Módulo | Contenido | Validaciones principales |
 | --- | --- | --- |
 | `dynamodb-table` | Tabla PK/SK, GSIs (`key_schema`), TTL, PITR, protección contra borrado | Nombre terminado en `-dev\|-test\|-prod` y GSIs únicos |
-| `network` | VPC, subredes públicas `/24` y privadas `/20` en 2–3 AZ, IGW, NAT (uno o por AZ), rutas, VPCE Gateway (S3, DynamoDB) e Interface (`logs`, `monitoring`, `execute-api`, `eks`, `eks-auth`, `ecr.api`, `ecr.dkr`, `sts`, `elasticloadbalancing`) con SG de 443 desde la VPC | CIDR `/16`, `az_count` 2–3 y políticas de endpoint no vacías |
+| `network` | VPC, subredes públicas `/24` y privadas `/20` en 2–3 AZ, IGW, NAT (uno o por AZ), rutas, VPCE Gateway (S3, DynamoDB) e Interface (recortados en [ADR-0034](0034-red-eks-api-gateway-terraform-floci.md) a `logs`, `monitoring`, `ecr.api`, `ecr.dkr`, `execute-api` y `eks-auth`) con SG de 443 desde las subredes privadas | CIDR `/16`, `az_count` 2–3 y políticas de endpoint no vacías |
 | `iam` | Un rol por ServiceAccount con política mínima (tabla propia, flags `read` o `read_write`, permisos explícitos) | Sin acciones comodín |
 | `eks` | Roles del plano de control y de nodos, clúster en subredes privadas (`authentication_mode = API`), node group, addon `eks-pod-identity-agent` y asociaciones de Pod Identity | Nombre `aegisvolt-<env>`, ≥ 2 subredes y sin `0.0.0.0/0` en el endpoint público |
 | `api-gateway` | NLB interno, target group `ip` (Traefik), VPC Link, API REST REGIONAL y PRIVATE (`aws:SourceVpce`), `{proxy+}` HTTP_PROXY por VPC_LINK, stage por ambiente con logs de acceso JSON y throttling | Timeout ≤ 29 s y precondición de VPCE para la API PRIVATE |

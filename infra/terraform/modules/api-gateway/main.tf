@@ -1,35 +1,85 @@
-# Entrada de un ambiente (ADR-0010, ADR-0033).
+# Entrada de un ambiente (ADR-0010, ADR-0034).
 #
-#   Internet → API REST REGIONAL (stage <env>) ─┐
-#   VPC (Prefect, operación) → VPCE execute-api → API REST PRIVATE ─┤
-#                                                 └→ VPC Link → NLB interno (subredes
-#                                                    privadas) → Traefik en EKS → pods
+#   Cliente en internet ──HTTPS──▶ API REST REGIONAL (stage <env>) ──┐
+#   Cliente en la VPC ──▶ Interface VPCE execute-api ──▶ API REST PRIVATE ──┤
+#                                                                       ▼
+#                VPC Link ──▶ NLB interno (subredes privadas) ──▶ ingress del clúster
+#                (Traefik, ADR-0032) ──▶ Service graphql-api ──▶ pods
 #
-# - Las integraciones son HTTP_PROXY por VPC_LINK: el tráfico de API Gateway al clúster
-#   entra a la VPC por el VPC Link y no recorre internet.
-# - La API PRIVATE solo acepta llamadas que llegan por el VPCE execute-api del ambiente
-#   (resource policy aws:SourceVpce).
-# - Floci (L-01, L-02): el DNS del NLB no resuelve, así que la URI de integración local
-#   se sobreescribe con integration_base_url; la resource policy se guarda pero no se evalúa.
+# - El cliente consume el endpoint de API Gateway (https://<id>.execute-api.<región>
+#   .amazonaws.com/<env>). El Interface VPCE execute-api es otra cosa: la puerta por la
+#   que un cliente DENTRO de la VPC invoca la API PRIVATE.
+# - API Gateway llega al clúster por el VPC Link (PrivateLink hacia el NLB), no por un VPCE.
+# - El NLB no alcanza pods por sí mismo: reenvía a los targets registrados (IP de los pods
+#   de Traefik, que registra el AWS Load Balancer Controller en AWS; en Floci, la IP del
+#   contenedor k3s y el NodePort de Traefik, registrados por k8s-deploy.sh).
+# - Floci (L-01, L-02): el DNS del NLB no resuelve, así que la integración local usa
+#   integration_base_url; la resource policy y los SG se guardan pero no se aplican.
 
 locals {
   name             = "aegisvolt-${var.environment}"
   integration_base = coalesce(var.integration_base_url, "http://${aws_lb.internal.dns_name}:${var.listener_port}")
+
+  apis = merge(
+    { public = { type = "REGIONAL" } },
+    var.create_private_api ? { private = { type = "PRIVATE" } } : {},
+  )
+
+  # Rutas: path null = raíz de la API. proxy = pasa {proxy} al backend.
+  routes = merge(
+    {
+      public-graphql = { api = "public", path = "graphql", method = "POST", backend = "/graphql", proxy = false }
+      public-root    = { api = "public", path = null, method = "GET", backend = "/", proxy = false }
+      public-spa     = { api = "public", path = "{proxy+}", method = "ANY", backend = "/{proxy}", proxy = true }
+    },
+    var.create_private_api ? {
+      private-graphql = { api = "private", path = "graphql", method = "POST", backend = "/graphql", proxy = false }
+    } : {},
+  )
+  resource_routes = { for k, r in local.routes : k => r if r.path != null }
 }
 
-# --- NLB interno y VPC Link ------------------------------------------------------------------------
+# --- NLB interno ----------------------------------------------------------------------------------
+# Sin reglas de entrada: el único camino al NLB es el VPC Link (PrivateLink), al que no se
+# aplican las reglas de entrada (enforce_security_group_inbound_rules_on_private_link_traffic
+# = off). Ningún otro recurso de la VPC puede llamarlo directamente.
+resource "aws_security_group" "nlb" {
+  name        = "${local.name}-ingress-nlb"
+  description = "NLB interno: entrada solo por VPC Link; salida al ingress del cluster"
+  vpc_id      = var.vpc_id
+  tags        = merge(var.tags, { Name = "${local.name}-ingress-nlb" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "nlb_to_ingress" {
+  for_each = toset(var.private_subnet_cidrs)
+
+  security_group_id = aws_security_group.nlb.id
+  description       = "Hacia el ingress (y su health check) en ${each.key}"
+  cidr_ipv4         = each.value
+  ip_protocol       = "tcp"
+  from_port         = var.target_port
+  to_port           = var.target_port
+}
+
 resource "aws_lb" "internal" {
   name               = "${local.name}-ingress"
   load_balancer_type = "network"
   internal           = true
   subnets            = var.private_subnet_ids
+  security_groups    = [aws_security_group.nlb.id]
 
-  enable_cross_zone_load_balancing = true
-  tags                             = var.tags
+  enforce_security_group_inbound_rules_on_private_link_traffic = "off"
+  enable_cross_zone_load_balancing                             = true
+
+  tags = var.tags
+
+  lifecycle {
+    # Floci 2.4.0 no devuelve este atributo (deriva permanente en el plan). El valor se
+    # fija al crear el NLB; ver ADR-0034 y L-14.
+    ignore_changes = [enforce_security_group_inbound_rules_on_private_link_traffic]
+  }
 }
 
-# Destino: el ingress del clúster (Traefik, ADR-0032). En AWS lo registra el AWS Load
-# Balancer Controller (TargetGroupBinding); por eso el tipo es ip.
 resource "aws_lb_target_group" "ingress" {
   name        = "${local.name}-ingress"
   port        = var.target_port
@@ -73,7 +123,7 @@ resource "aws_cloudwatch_log_group" "access" {
 }
 
 locals {
-  # Mismo esquema base que el resto de logs (ADR-0028): JSON con correlation_id.
+  # Mismo esquema base que el resto de logs (ADR-0028).
   access_log_format = jsonencode({
     timestamp      = "$context.requestTime"
     service_name   = "api-gateway"
@@ -86,11 +136,6 @@ locals {
     source_ip      = "$context.identity.sourceIp"
     vpce_id        = "$context.identity.vpceId"
   })
-
-  apis = merge(
-    { public = { type = "REGIONAL", path_prefix = "" } },
-    var.create_private_api ? { private = { type = "PRIVATE", path_prefix = "ops/" } } : {},
-  )
 }
 
 # --- APIs REST ----------------------------------------------------------------------------------------
@@ -154,40 +199,47 @@ resource "aws_api_gateway_rest_api_policy" "private" {
   policy      = data.aws_iam_policy_document.private[0].json
 }
 
-# ANY /{proxy+} → VPC Link → NLB → ingress del clúster (que enruta /graphql y la web).
-resource "aws_api_gateway_resource" "proxy" {
-  for_each = local.apis
+resource "aws_api_gateway_resource" "route" {
+  for_each = local.resource_routes
 
-  rest_api_id = aws_api_gateway_rest_api.this[each.key].id
-  parent_id   = aws_api_gateway_rest_api.this[each.key].root_resource_id
-  path_part   = "{proxy+}"
+  rest_api_id = aws_api_gateway_rest_api.this[each.value.api].id
+  parent_id   = aws_api_gateway_rest_api.this[each.value.api].root_resource_id
+  path_part   = each.value.path
 }
 
-resource "aws_api_gateway_method" "proxy" {
-  for_each = local.apis
-
-  rest_api_id   = aws_api_gateway_rest_api.this[each.key].id
-  resource_id   = aws_api_gateway_resource.proxy[each.key].id
-  http_method   = "ANY"
-  authorization = "NONE" # la autenticación (JWT de Cognito) la valida graphql-api (ADR-0026)
-
-  request_parameters = { "method.request.path.proxy" = true }
+locals {
+  resource_id = {
+    for k, r in local.routes : k => (
+      r.path == null ? aws_api_gateway_rest_api.this[r.api].root_resource_id : aws_api_gateway_resource.route[k].id
+    )
+  }
 }
 
-resource "aws_api_gateway_integration" "proxy" {
-  for_each = local.apis
+resource "aws_api_gateway_method" "route" {
+  for_each = local.routes
 
-  rest_api_id             = aws_api_gateway_rest_api.this[each.key].id
-  resource_id             = aws_api_gateway_resource.proxy[each.key].id
-  http_method             = aws_api_gateway_method.proxy[each.key].http_method
+  rest_api_id   = aws_api_gateway_rest_api.this[each.value.api].id
+  resource_id   = local.resource_id[each.key]
+  http_method   = each.value.method
+  authorization = "NONE" # el JWT de Cognito lo valida graphql-api (ADR-0026); ver ADR-0034
+
+  request_parameters = each.value.proxy ? { "method.request.path.proxy" = true } : {}
+}
+
+resource "aws_api_gateway_integration" "route" {
+  for_each = local.routes
+
+  rest_api_id             = aws_api_gateway_rest_api.this[each.value.api].id
+  resource_id             = local.resource_id[each.key]
+  http_method             = aws_api_gateway_method.route[each.key].http_method
   type                    = "HTTP_PROXY"
-  integration_http_method = "ANY"
-  uri                     = "${local.integration_base}/${each.value.path_prefix}{proxy}"
+  integration_http_method = each.value.method
+  uri                     = "${local.integration_base}${each.value.backend}"
   connection_type         = "VPC_LINK"
   connection_id           = aws_api_gateway_vpc_link.this.id
   timeout_milliseconds    = var.integration_timeout_ms
 
-  request_parameters = { "integration.request.path.proxy" = "method.request.path.proxy" }
+  request_parameters = each.value.proxy ? { "integration.request.path.proxy" = "method.request.path.proxy" } : {}
 }
 
 resource "aws_api_gateway_deployment" "this" {
@@ -195,13 +247,12 @@ resource "aws_api_gateway_deployment" "this" {
 
   rest_api_id = aws_api_gateway_rest_api.this[each.key].id
 
-  # Nuevo deployment cuando cambia la definición de la API.
+  # Nuevo deployment cuando cambia cualquier ruta de la API.
   triggers = {
     redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.proxy[each.key].id,
-      aws_api_gateway_method.proxy[each.key].id,
-      aws_api_gateway_integration.proxy[each.key].uri,
-      aws_api_gateway_integration.proxy[each.key].connection_id,
+      for k, r in local.routes : [
+        k, r, aws_api_gateway_integration.route[k].uri, aws_api_gateway_integration.route[k].connection_id,
+      ] if r.api == each.key
     ]))
   }
 
@@ -209,7 +260,7 @@ resource "aws_api_gateway_deployment" "this" {
     create_before_destroy = true
   }
 
-  depends_on = [aws_api_gateway_integration.proxy, aws_api_gateway_rest_api_policy.private]
+  depends_on = [aws_api_gateway_integration.route, aws_api_gateway_rest_api_policy.private]
 }
 
 resource "aws_api_gateway_stage" "this" {
