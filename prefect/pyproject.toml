@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14"
 # Versiones exactas, publicadas hace más de 14 días (ADR-0030).
 dependencies = [
-  "prefect==3.9.0",
+  "prefect==3.9.1",
   "boto3==1.43.118",
   # boto3 admite cualquier botocore 1.43.x: se fija para respetar la antigüedad mínima.
   "botocore==1.43.118",
