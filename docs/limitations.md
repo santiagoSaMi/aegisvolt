@@ -197,7 +197,7 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Lo que sí funciona:** el camino API Gateway (HTTPS) → VPC Link → listener del NLB → contenedor k3s:NodePort → Traefik → pod, el health check HTTP del target group y los logs del plano de control de EKS.
 - **En AWS real:** los logs de acceso de API Gateway requieren el rol de cuenta de `global/` (`aws_api_gateway_account`), ya declarado.
 
-## L-15 · CI/CD: ambientes efímeros y workflows sin ejecutar en GitHub
+## L-15 · CI/CD: ambientes efímeros en runners hospedados
 
 - **Requisito:** §3 — CI con pruebas y `terraform plan` en cada PR; apply dinámico por rama y canary tras el merge.
 - **Restricciones (ADR-0035):**
@@ -209,15 +209,19 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
   - **Despliegue post-merge:** crea, verifica y destruye un ambiente **temporal** (Floci + EKS/k3s + workloads) dentro del runner. **No modifica** el Floci persistente del autor, que se despliega a mano con `scripts/floci/*`.
   - **Canary:** se ejecuta en otro ambiente temporal, con la línea base (la rama antes del merge) como estable. Si la línea base no tiene el canary de Argo (primer despliegue), el job declara "canary no ejecutado".
   - **Recursos del runner:** 4 CPU, 16 GB y 14 GB de disco. El job libera toolchains preinstalados y verifica la capacidad antes de iniciar k3s; si no alcanza, falla con el motivo.
-- **Pendiente de verificar:**
-  - **Los workflows no se ejecutaron en GitHub** al escribir esta fase, porque no hubo `git push` (CLAUDE.md).
-  - Se verificaron localmente:
-    - los scripts que invocan: `promotion-guard` con pruebas, `resolve-environment`, `terraform-static-checks`, `terraform-pr-plan` en modo incremental y "desde cero", `floci-environment` y `canary-release` contra Floci;
-    - la estructura de los YAML con `scripts/ci/check-workflows.py`.
-  - **Canary del CI probado localmente** (2026-11-16, `dev`): línea base `3ba2dc3` como estable y el commit actual como canary con `canary-demo.sh`. Argo **promovió** tras los dos análisis; el tráfico medido fue 78,7/21,3 al 80/20 y 49,3/50,7 al 50/50, sin errores, con el informe en el resumen del job.
-    - Al desplegar la línea base sobre el `dev` local, que ya existía, Argo inició a su vez un canary sin tráfico: quedó *Inconclusive* y en pausa, y hubo que promoverlo a mano.
-    - En el runner no ocurre: el clúster es nuevo y el primer despliegue de un Rollout no ejecuta los pasos de canary.
-  - No se pudo ejecutar `actionlint`: la descarga y ejecución de su binario fue denegada en esta sesión.
-  - Tampoco se ejecutaron localmente Gitleaks, Trivy ni CodeQL.
-  - Los nombres exactos de los checks deben confirmarse en el primer PR antes de marcarlos como obligatorios ([runbook](runbooks/github-repository-settings.md)).
-
+- **Primera ejecución en GitHub** (PR `feature/ci-cd → dev` y su merge, 2026-11-16):
+  - **CI, `terraform-plan` y `security`:** pasan todos, incluidos integración y E2E contra el Floci temporal del runner, después de corregir cinco problemas que solo aparecieron en un runner limpio:
+    1. `terraform validate` en el workspace `default` de un init limpio: ahora se valida `live` en `dev`, `test` y `prod`;
+    2. `pnpm deploy --offline` sin los metadatos que pnpm 12 exige para verificar su política de cadena de suministro: se quitó `--offline` de `deploy`;
+    3. el *default setup* de CodeQL activo, que bloquea el *advanced setup*: se desactivó;
+    4. cuatro claves de idempotencia UUID marcadas por la regla genérica de Gitleaks: excepción acotada en `.gitleaks.toml`;
+    5. CVE-2026-111497 (crítica) en `brotli-libs` de la imagen `web`: actualización a 1.2.1-r0.
+  - **`deploy` (post-merge a `dev`):** pasó. Creó, desplegó y verificó el ambiente temporal completo.
+  - **`canary-analysis`:** falló al construir la **línea base** (`d2824c9`), que aún tenía el defecto 2 en sus Dockerfiles. Es transitorio: la próxima línea base ya incluye el arreglo. Desde entonces, una línea base que no se puede construir se declara "canary no ejecutado" en vez de fallar, y se construye antes de levantar Floci.
+- **Pendiente de verificar en GitHub:**
+  - un canary ejecutado de punta a punta en el runner; lo probará el siguiente merge a `dev`, por ejemplo el PR de prueba 7.1 del runbook;
+  - las promociones `dev → test` y `test → prod`.
+- **Verificado localmente antes del push:**
+  - los scripts (`promotion-guard` con pruebas, `resolve-environment`, `terraform-static-checks`, `terraform-pr-plan` en sus dos modos, `floci-environment` y `canary-release`);
+  - el canary del CI contra el `dev` local: línea base `3ba2dc3` estable, el commit como canary, y Argo promovió con 78,7/21,3 y 49,3/50,7.
+  - No se pudieron ejecutar `actionlint` ni Gitleaks localmente: se denegó descargar y ejecutar sus binarios en esta sesión. Su lugar lo ocupan `scripts/ci/check-workflows.py`, que ya detectó un error real de YAML, y el informe de hallazgos de Gitleaks en el propio job.
