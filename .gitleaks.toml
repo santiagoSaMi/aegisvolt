@@ -1,0 +1,25 @@
+# Configuración de Gitleaks (check `secret-scan`, ADR-0035). Se carga desde la raíz del
+# repositorio. Usa TODAS las reglas por defecto y añade una única excepción acotada.
+title = "aegisvolt"
+
+[extend]
+useDefault = true
+
+# Falsos positivos revisados (2026-11-16): claves de IDEMPOTENCIA de pruebas y de la guía de
+# GraphQL. Son UUID con los que un cliente identifica una petición para no procesarla dos
+# veces (ADR-0005); no son credenciales ni dan acceso a nada. La regla genérica las marca
+# porque el nombre contiene "key".
+#   docs/graphql/README.md:101                                                (fb60f80)
+#   services/billing-wallet/test/presentation/http.test.ts:22                 (39ad32b)
+#   services/saga-orchestrator/test/infrastructure/service-http-client.test.ts:57 (39ad32b)
+#   services/station-reservation/test/presentation/http.test.ts:22            (39ad32b)
+# Acotada: solo la regla generic-api-key y solo si la LÍNEA asigna un UUID a un nombre de
+# clave de idempotencia. Un UUID bajo otro nombre (API_KEY…) o cualquier otro valor bajo
+# IDEMPOTENCY_KEY sigue detectándose.
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Claves de idempotencia UUID de pruebas y documentación (no son secretos)"
+regexTarget = "line"
+regexes = [
+  '''(?i)idempotency[-_]?key['"]?\s*[:=]\s*['"][0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['"]''',
+]

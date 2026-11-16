@@ -82,7 +82,8 @@ jobs:
         run: |
           report="${RUNNER_TEMP}/gitleaks.json"
           status=0
-          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --exit-code 1 \
+          # .gitleaks.toml: reglas por defecto + una excepción acotada y documentada.
+          "${RUNNER_TEMP}/gitleaks" git --config .gitleaks.toml --redact --no-banner --exit-code 1 \
             --report-format json --report-path "$report" . || status=$?
           # Qué y dónde, NUNCA el valor: solo regla, archivo, línea y commit de cada hallazgo.
           if [[ -s "$report" ]] && [[ "$(jq length "$report")" -gt 0 ]]; then
@@ -180,8 +181,41 @@ jobs:
               || status=1
           done
           exit "$status"
-      - if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+      # Una subida por imagen, cada una con su categoría: GitHub ya no combina varias
+      # ejecuciones SARIF en una misma categoría (changelog 2025-07-21).
+      - name: SARIF web
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
-          sarif_file: ${{ runner.temp }}/sarif
-          category: trivy-images
+          sarif_file: ${{ runner.temp }}/sarif/web.sarif
+          category: trivy-images/web
+      - name: SARIF graphql-api
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/graphql-api.sarif
+          category: trivy-images/graphql-api
+      - name: SARIF station-reservation
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/station-reservation.sarif
+          category: trivy-images/station-reservation
+      - name: SARIF billing-wallet
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/billing-wallet.sarif
+          category: trivy-images/billing-wallet
+      - name: SARIF energy-dispatch
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/energy-dispatch.sarif
+          category: trivy-images/energy-dispatch
+      - name: SARIF saga-orchestrator
+        if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/saga-orchestrator.sarif
+          category: trivy-images/saga-orchestrator
