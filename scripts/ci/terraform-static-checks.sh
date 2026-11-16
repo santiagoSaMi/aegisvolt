@@ -10,7 +10,16 @@ terraform fmt -check -recursive -diff "$TF"
 echo "fmt OK"
 for root in bootstrap global live; do
   terraform -chdir="${TF}/${root}" init -backend=false -input=false -lockfile=readonly >/dev/null
-  terraform -chdir="${TF}/${root}" validate -no-color
+  if [[ "$root" == live ]]; then
+    # live deriva el ambiente de terraform.workspace: en un init limpio es `default`, que las
+    # validaciones de los módulos rechazan (con razón). Se valida en cada workspace real.
+    for ws in dev test prod; do
+      echo "live (workspace ${ws}):"
+      TF_WORKSPACE="$ws" terraform -chdir="${TF}/${root}" validate -no-color
+    done
+  else
+    terraform -chdir="${TF}/${root}" validate -no-color
+  fi
   grep -q "version *= *\"${PROVIDER}\"" "${TF}/${root}/.terraform.lock.hcl" \
     || { echo "::error::${root}/.terraform.lock.hcl no fija hashicorp/aws ${PROVIDER}"; exit 1; }
 done

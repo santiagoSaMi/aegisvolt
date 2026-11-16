@@ -80,7 +80,21 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${f}" -C "${RUNNER_TEMP}" gitleaks
       - name: Historial completo (valores enmascarados en la salida)
         run: |
-          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --exit-code 1 .
+          report="${RUNNER_TEMP}/gitleaks.json"
+          status=0
+          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --exit-code 1 \
+            --report-format json --report-path "$report" . || status=$?
+          # Qué y dónde, NUNCA el valor: solo regla, archivo, línea y commit de cada hallazgo.
+          if [[ -s "$report" ]] && [[ "$(jq length "$report")" -gt 0 ]]; then
+            {
+              echo "## Gitleaks: $(jq length "$report") hallazgos"
+              echo
+              echo "| Regla | Archivo:línea | Commit |"
+              echo "| --- | --- | --- |"
+              jq -r '.[] | "| \(.RuleID) | `\(.File):\(.StartLine)` | `\(.Commit[0:12])` |"' "$report"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
 
   codeql:
     name: codeql (${{ matrix.language }})
@@ -145,13 +159,16 @@ jobs:
         with:
           persist-credentials: false
       - name: Trivy (binario oficial verificado)
-        run: scripts/ci/install-trivy.sh
+        run: |
+          scripts/ci/install-trivy.sh
+          # Directorio del SARIF antes del build: si el build falla, la subida no oculta la causa.
+          mkdir -p "${RUNNER_TEMP}/sarif"
       - name: Construir las imágenes (sha-<commit>)
         run: scripts/docker/build-images.sh --tag-file "${RUNNER_TEMP}/tag"
       - name: Vulnerabilidades de las imágenes
+        id: scan
         run: |
           tag="$(cat "${RUNNER_TEMP}/tag")"
-          mkdir -p "${RUNNER_TEMP}/sarif"
           status=0
           for app in web graphql-api station-reservation billing-wallet energy-dispatch saga-orchestrator; do
             img="aegisvolt/${app}:${tag}"
@@ -163,7 +180,7 @@ jobs:
               || status=1
           done
           exit "$status"
-      - if: always() && env.CAN_UPLOAD == 'true'
+      - if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ runner.temp }}/sarif

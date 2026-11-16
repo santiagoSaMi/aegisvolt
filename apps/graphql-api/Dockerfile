@@ -18,6 +18,9 @@ RUN --mount=type=cache,id=aegisvolt-pnpm,target=/pnpm/store \
     pnpm fetch
 
 # --- 2. Build: paquetes del workspace + la app, y paquete de producción aislado --------
+# `deploy` sin --offline: pnpm 12 vuelve a verificar las políticas de cadena de suministro
+# del lockfile de /out y necesita los metadatos completos del registro (el store ya tiene
+# los paquetes; solo se leen metadatos). Con --offline falla en una caché limpia (CI).
 FROM deps AS build
 COPY package.json tsconfig.base.json tsconfig.node.json ./
 COPY packages ./packages
@@ -25,7 +28,7 @@ COPY apps/graphql-api ./apps/graphql-api
 RUN --mount=type=cache,id=aegisvolt-pnpm,target=/pnpm/store \
     pnpm install --offline --frozen-lockfile --filter "@aegisvolt/graphql-api..." \
  && pnpm --filter "@aegisvolt/graphql-api..." run build \
- && pnpm --filter "@aegisvolt/graphql-api" deploy --prod --offline /out \
+ && pnpm --filter "@aegisvolt/graphql-api" deploy --prod /out \
  && rm -f /out/pnpm-lock.yaml /out/pnpm-workspace.yaml
 
 # --- 3. Runtime: solo Node y el paquete de producción ----------------------------------
