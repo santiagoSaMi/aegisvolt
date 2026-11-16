@@ -197,3 +197,27 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Lo que sí funciona:** el camino API Gateway (HTTPS) → VPC Link → listener del NLB → contenedor k3s:NodePort → Traefik → pod, el health check HTTP del target group y los logs del plano de control de EKS.
 - **En AWS real:** los logs de acceso de API Gateway requieren el rol de cuenta de `global/` (`aws_api_gateway_account`), ya declarado.
 
+## L-15 · CI/CD: ambientes efímeros y workflows sin ejecutar en GitHub
+
+- **Requisito:** §3 — CI con pruebas y `terraform plan` en cada PR; apply dinámico por rama y canary tras el merge.
+- **Restricciones (ADR-0035):**
+  - repositorio público con GitHub Free y solo runners hospedados;
+  - el Floci persistente del autor no es accesible ni se expone;
+  - no hay persistencia entre ejecuciones de GitHub Actions.
+- **Consecuencias:**
+  - **Plan del PR:** el estado real del ambiente no existe en el runner. Se **reconstruye** aplicando la rama destino en un Floci temporal; si la rama destino no tiene Terraform, el plan se declara "desde cero". No es el estado del Floci persistente del autor.
+  - **Despliegue post-merge:** crea, verifica y destruye un ambiente **temporal** (Floci + EKS/k3s + workloads) dentro del runner. **No modifica** el Floci persistente del autor, que se despliega a mano con `scripts/floci/*`.
+  - **Canary:** se ejecuta en otro ambiente temporal, con la línea base (la rama antes del merge) como estable. Si la línea base no tiene el canary de Argo (primer despliegue), el job declara "canary no ejecutado".
+  - **Recursos del runner:** 4 CPU, 16 GB y 14 GB de disco. El job libera toolchains preinstalados y verifica la capacidad antes de iniciar k3s; si no alcanza, falla con el motivo.
+- **Pendiente de verificar:**
+  - **Los workflows no se ejecutaron en GitHub** al escribir esta fase, porque no hubo `git push` (CLAUDE.md).
+  - Se verificaron localmente:
+    - los scripts que invocan: `promotion-guard` con pruebas, `resolve-environment`, `terraform-static-checks`, `terraform-pr-plan` en modo incremental y "desde cero", `floci-environment` y `canary-release` contra Floci;
+    - la estructura de los YAML con `scripts/ci/check-workflows.py`.
+  - **Canary del CI probado localmente** (2026-11-16, `dev`): línea base `3ba2dc3` como estable y el commit actual como canary con `canary-demo.sh`. Argo **promovió** tras los dos análisis; el tráfico medido fue 78,7/21,3 al 80/20 y 49,3/50,7 al 50/50, sin errores, con el informe en el resumen del job.
+    - Al desplegar la línea base sobre el `dev` local, que ya existía, Argo inició a su vez un canary sin tráfico: quedó *Inconclusive* y en pausa, y hubo que promoverlo a mano.
+    - En el runner no ocurre: el clúster es nuevo y el primer despliegue de un Rollout no ejecuta los pasos de canary.
+  - No se pudo ejecutar `actionlint`: la descarga y ejecución de su binario fue denegada en esta sesión.
+  - Tampoco se ejecutaron localmente Gitleaks, Trivy ni CodeQL.
+  - Los nombres exactos de los checks deben confirmarse en el primer PR antes de marcarlos como obligatorios ([runbook](runbooks/github-repository-settings.md)).
+

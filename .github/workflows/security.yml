@@ -1,0 +1,170 @@
+# Análisis de seguridad (ADR-0035): dependencias, secretos, código, IaC e imágenes.
+#
+# - Actions oficiales fijadas por SHA; Trivy y Gitleaks como binarios oficiales verificados
+#   por sha256 (sin Actions de terceros).
+# - Los SARIF se publican en Code scanning (repo público: disponible en GitHub Free) solo
+#   cuando el token puede escribir: en PRs desde forks el GITHUB_TOKEN es de solo lectura.
+# - Dependabot (versiones y seguridad) se configura en .github/dependabot.yml.
+# - Checks que bloquean: dependency-review, dependency-audit, secret-scan, codeql,
+#   trivy-images (CRITICAL con parche). trivy-config solo informa (hallazgos de IaC que
+#   son decisiones documentadas, p. ej. el componente local de Floci).
+name: security
+
+on:
+  pull_request:
+    branches: [dev, test, prod]
+  push:
+    branches: [dev, test, prod]
+  schedule:
+    - cron: '17 6 * * 1' # lunes 06:17 UTC: nuevas CVE sobre lo ya integrado
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  # SARIF solo si el token puede escribir (no en PRs desde forks).
+  CAN_UPLOAD: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+        with:
+          install: 'false'
+      - name: pnpm audit (falla con severidad alta o crítica)
+        run: pnpm audit --audit-level high
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Gitleaks (binario oficial verificado)
+        run: |
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${f}" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${f}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${f}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${f}" -C "${RUNNER_TEMP}" gitleaks
+      - name: Historial completo (valores enmascarados en la salida)
+        run: |
+          "${RUNNER_TEMP}/gitleaks" git --redact --no-banner --exit-code 1 .
+
+  codeql:
+    name: codeql (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
+          upload: ${{ env.CAN_UPLOAD == 'true' && 'always' || 'never' }}
+
+  trivy-config:
+    name: trivy-config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy (binario oficial verificado)
+        run: scripts/ci/install-trivy.sh
+      - name: Configuración insegura en Terraform, Kubernetes y Dockerfiles (informativo)
+        run: |
+          # `trivy config` acepta un solo directorio: la raíz, sin dependencias ni artefactos.
+          skip=(--skip-dirs '**/node_modules' --skip-dirs '**/dist' --skip-dirs prefect --skip-dirs tests --skip-dirs '**/.terraform')
+          "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format sarif --output "${RUNNER_TEMP}/trivy-config.sarif" .
+          { echo '## Trivy config (HIGH, CRITICAL)'; echo '```'; "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format table .; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - if: env.CAN_UPLOAD == 'true'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/trivy-config.sarif
+          category: trivy-config
+
+  trivy-images:
+    name: trivy-images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy (binario oficial verificado)
+        run: scripts/ci/install-trivy.sh
+      - name: Construir las imágenes (sha-<commit>)
+        run: scripts/docker/build-images.sh --tag-file "${RUNNER_TEMP}/tag"
+      - name: Vulnerabilidades de las imágenes
+        run: |
+          tag="$(cat "${RUNNER_TEMP}/tag")"
+          mkdir -p "${RUNNER_TEMP}/sarif"
+          status=0
+          for app in web graphql-api station-reservation billing-wallet energy-dispatch saga-orchestrator; do
+            img="aegisvolt/${app}:${tag}"
+            # SARIF completo (HIGH y CRITICAL) para Code scanning.
+            "${RUNNER_TEMP}/trivy" image --format sarif --output "${RUNNER_TEMP}/sarif/${app}.sarif" \
+              --severity HIGH,CRITICAL "$img"
+            # Puerta: CRITICAL con parche disponible.
+            "${RUNNER_TEMP}/trivy" image --severity CRITICAL --ignore-unfixed --exit-code 1 --format table "$img" \
+              || status=1
+          done
+          exit "$status"
+      - if: always() && env.CAN_UPLOAD == 'true'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/sarif
+          category: trivy-images

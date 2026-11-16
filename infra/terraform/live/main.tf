@@ -17,6 +17,8 @@ locals {
     feature-flags = { owner = "graphql-api", gsis = [], ttl = null }
   }
 
+  eks_enabled = coalesce(var.eks_enabled_override, var.eks.enabled)
+
   feature_flags = { for f in jsondecode(file("${path.module}/feature-flags.json")).flags : f.key => f }
 
   log_group_arn_prefix = "arn:${data.aws_partition.current.partition}:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aegisvolt/${local.environment}"
@@ -139,7 +141,7 @@ module "iam" {
 # --- EKS ------------------------------------------------------------------------------------------
 module "eks" {
   source = "../modules/eks"
-  count  = var.eks.enabled ? 1 : 0
+  count  = local.eks_enabled ? 1 : 0
 
   cluster_name                        = local.name
   kubernetes_version                  = var.eks.kubernetes_version

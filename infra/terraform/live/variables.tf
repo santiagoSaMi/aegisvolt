@@ -63,6 +63,17 @@ variable "ingress_target_port" {
   }
 }
 
+variable "eks_enabled_override" {
+  description = <<-EOT
+    Fuerza eks.enabled para TODOS los ambientes de este destino (null: usa envs/<env>.tfvars).
+    Lo fija el runner de CI (TF_VAR_eks_enabled_override=true), que tiene memoria para un
+    k3s; en la máquina local test y prod lo dejan apagado (L-11). ADR-0035.
+  EOT
+  type        = bool
+  default     = null
+  nullable    = true
+}
+
 # --- Ambiente (envs/<env>.tfvars) ----------------------------------------------------------------
 
 variable "environment" {

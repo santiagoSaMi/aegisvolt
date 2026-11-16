@@ -1,0 +1,87 @@
+# Terraform plan de un pull request (ADR-0035). PLAN, NUNCA APPLY del commit del PR.
+#
+# - Workspace = rama destino (dev | test | prod), validado por scripts/ci/resolve-environment.sh.
+# - El estado real del ambiente no es accesible desde GitHub (vive en un Floci local y no
+#   hay persistencia entre ejecuciones). No se usa un estado vacío como si fuera el real:
+#   scripts/ci/terraform-pr-plan.sh RECONSTRUYE el estado aplicando la rama destino en un
+#   Floci temporal del runner y planifica el PR sobre él (o declara "desde cero").
+# - Sin filtro de rutas: un workflow filtrado deja el check en "Pending" y bloquea el merge.
+#   Si el PR no toca infraestructura, el job lo informa y termina sin plan.
+# - Job `terraform-plan`: nombre estable, required status check.
+name: terraform-plan
+
+on:
+  pull_request:
+    branches: [dev, test, prod]
+
+permissions: {}
+
+concurrency:
+  group: terraform-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-plan:
+    name: terraform-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Ambiente (rama destino)
+        id: env
+        run: scripts/ci/resolve-environment.sh
+
+      - name: ¿Cambia la infraestructura?
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          paths=(infra/terraform scripts/floci/terraform-lib.sh scripts/floci/terraform-live.sh
+                 scripts/floci/terraform-global.sh scripts/floci/terraform-bootstrap.sh
+                 scripts/ci/terraform-pr-plan.sh infra/local/floci/docker-compose.yml)
+          if git diff --quiet "${BASE_SHA}...HEAD" -- "${paths[@]}"; then
+            echo "infra=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+            git diff --stat "${BASE_SHA}...HEAD" -- "${paths[@]}"
+          fi
+
+      - name: Sin cambios de infraestructura
+        if: steps.changes.outputs.infra == 'false'
+        env:
+          ENVIRONMENT: ${{ steps.env.outputs.environment }}
+        run: |
+          {
+            echo "## Terraform plan · workspace \`${ENVIRONMENT}\`"
+            echo
+            echo "El PR no modifica \`infra/terraform\` ni los scripts de Terraform: no se genera plan."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: steps.changes.outputs.infra == 'true'
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Espacio y capacidad del runner (Floci + k3s)
+        if: steps.changes.outputs.infra == 'true'
+        run: |
+          scripts/ci/free-runner-disk.sh
+          scripts/ci/runner-preflight.sh 8 10
+
+      - name: Plan (estado reconstruido desde la rama destino)
+        if: steps.changes.outputs.infra == 'true'
+        env:
+          ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/ci/terraform-pr-plan.sh "$ENVIRONMENT" "$BASE_SHA"
+
+      - name: Diagnóstico
+        if: failure() && steps.changes.outputs.infra == 'true'
+        run: docker logs --tail 200 aegisvolt-floci || true

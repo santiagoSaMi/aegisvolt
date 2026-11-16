@@ -6,8 +6,10 @@ name: aegisvolt-floci
 
 services:
   floci:
-    # Versión fijada para reproducibilidad. Actualizar solo vía PR + ADR.
-    image: floci/floci:2.4.0
+    # Versión fijada por etiqueta Y digest (verificado contra Docker Hub el 2026-11-15):
+    # local y CI (runners hospedados) ejecutan exactamente la misma imagen. Actualizar solo
+    # vía PR + ADR (Dependabot propone las actualizaciones).
+    image: floci/floci:2.4.0@sha256:5ee85db604c4aa74ac76e07ea5cc83086f37bb472bf3dbb97e34019e48efae9c
     container_name: aegisvolt-floci
     # UID:GID del usuario del host + GID del grupo docker, para que los datos
     # en ./data no queden como root y Floci pueda usar el socket de Docker.

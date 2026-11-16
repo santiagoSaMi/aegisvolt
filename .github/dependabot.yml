@@ -1,0 +1,73 @@
+# Dependabot (ADR-0035). PRs de versión contra `dev` (sus ramas dependabot/* pasan el
+# promotion-guard solo desde este repositorio) y luego siguen la promoción normal.
+# cooldown de 14 días: convención del proyecto de no adoptar versiones con menos de dos
+# semanas (solo aplica a actualizaciones de versión; las de seguridad no esperan).
+version: 2
+
+updates:
+  - package-ecosystem: npm # pnpm 12 (pnpm-lock.yaml)
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    groups:
+      aws-sdk:
+        patterns: ['@aws-sdk/*']
+      dev-tooling:
+        dependency-type: development
+
+  - package-ecosystem: pip
+    directory: /prefect
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directories: ['/', '/.github/actions/*']
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directories:
+      - /apps/web
+      - /apps/graphql-api
+      - /services/station-reservation
+      - /services/billing-wallet
+      - /services/energy-dispatch
+      - /services/saga-orchestrator
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      base-images:
+        patterns: ['*']
+
+  - package-ecosystem: docker-compose
+    directory: /infra/local/floci
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+
+  - package-ecosystem: terraform
+    directories: ['/infra/terraform/bootstrap', '/infra/terraform/global', '/infra/terraform/live']
+    target-branch: dev
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
