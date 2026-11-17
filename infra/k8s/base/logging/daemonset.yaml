@@ -19,6 +19,11 @@ spec:
         app.kubernetes.io/part-of: aegisvolt-platform
     spec:
       serviceAccountName: fluent-bit
+      # Security context del POD (KSV-0118): seccomp por defecto del runtime para todo el pod.
+      # El contenedor añade el suyo (root solo para leer /var/log del nodo, sin capacidades).
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       # Un colector en cada nodo, también en los que tienen taints.
       tolerations:
         - operator: Exists

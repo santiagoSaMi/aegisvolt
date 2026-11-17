@@ -59,3 +59,8 @@ output "kubeconfig" {
     }]
   })
 }
+
+output "secrets_kms_key_arn" {
+  description = "Clave KMS que cifra los Secrets de Kubernetes del clúster."
+  value       = aws_kms_key.secrets.arn
+}

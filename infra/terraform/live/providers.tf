@@ -32,6 +32,7 @@ provider "aws" {
     eks        = local.floci_endpoint
     elbv2      = local.floci_endpoint
     iam        = local.floci_endpoint
+    kms        = local.floci_endpoint
     logs       = local.floci_endpoint
     s3         = local.floci_endpoint
     sts        = local.floci_endpoint

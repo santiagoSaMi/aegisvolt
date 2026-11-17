@@ -69,6 +69,20 @@ resource "aws_cloudwatch_log_group" "control_plane" {
   tags              = var.tags
 }
 
+# Clave KMS propia del clúster para cifrar los Secrets de Kubernetes en etcd (AWS-0039).
+# Rotación anual; ventana de borrado máxima.
+resource "aws_kms_key" "secrets" {
+  description             = "AegisVolt: Secrets de Kubernetes de ${var.cluster_name}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "secrets" {
+  name          = "alias/${var.cluster_name}-eks-secrets"
+  target_key_id = aws_kms_key.secrets.key_id
+}
+
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   version  = var.kubernetes_version
@@ -87,6 +101,13 @@ resource "aws_eks_cluster" "this" {
   }
 
   enabled_cluster_log_types = var.control_plane_log_types
+
+  encryption_config {
+    resources = ["secrets"]
+    provider {
+      key_arn = aws_kms_key.secrets.arn
+    }
+  }
 
   tags = var.tags
 

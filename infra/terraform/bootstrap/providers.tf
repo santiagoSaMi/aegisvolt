@@ -19,6 +19,7 @@ provider "aws" {
   s3_use_path_style           = local.floci
 
   endpoints {
+    kms = local.floci_endpoint
     s3  = local.floci_endpoint
     sts = local.floci_endpoint
   }
