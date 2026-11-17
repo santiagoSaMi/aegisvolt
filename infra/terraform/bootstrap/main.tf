@@ -25,12 +25,30 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# Clave KMS propia del estado (AWS-0132): control de acceso a la clave y auditoría de su uso,
+# además del cifrado. Rotación anual; ventana de borrado máxima (30 días).
+resource "aws_kms_key" "state" {
+  description             = "AegisVolt: cifrado del estado de Terraform (${var.state_bucket})"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+}
+
+resource "aws_kms_alias" "state" {
+  name          = "alias/aegisvolt-tfstate"
+  target_key_id = aws_kms_key.state.key_id
+}
+
+# Cifrado por defecto del bucket con esa clave (bucket key: menos llamadas a KMS). Los backends
+# usan encrypt = false para NO forzar SSE-S3 en cada escritura: así el estado queda cifrado con
+# esta clave por el cifrado por defecto del bucket.
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.state.arn
     }
+    bucket_key_enabled = true
   }
 }
 
