@@ -1,0 +1,41 @@
+# Riesgos ACEPTADOS de configuración (trivy config, job `trivy-config`, ADR-0035).
+# Decisión del autor (2026-11-16): aceptar y documentar en lugar de corregir. El intento de
+# corregirlos (KMS para el bucket de estado y para los Secrets de EKS) se revirtió: Floci no
+# implementa AssociateEncryptionConfig para clústeres existentes ni aplica el SSE-KMS por
+# defecto del bucket, y el despliegue de dev falló.
+# Cada exclusión está acotada a su archivo, justificada y VENCE: al vencer, Trivy vuelve a
+# reportar el hallazgo y el riesgo debe revisarse de nuevo.
+# Formato: https://trivy.dev/docs/v0.76/guide/configuration/filtering/ (experimental:
+# se carga con --ignorefile).
+
+misconfigurations:
+  - id: KSV-0118
+    paths:
+      - infra/k8s/base/logging/daemonset.yaml
+    expired_at: 2027-05-16
+    statement: >-
+      Fluent Bit corre como root SOLO para leer los logs del nodo (/var/log, archivos 0640 de
+      root) y declara un securityContext explícito en el contenedor: sin capacidades
+      (drop ALL), sin escalada de privilegios, raíz de solo lectura y seccomp RuntimeDefault.
+      La regla marca la ausencia del securityContext a nivel de POD.
+
+  - id: AWS-0132
+    paths:
+      - infra/terraform/bootstrap/main.tf
+    expired_at: 2027-05-16
+    statement: >-
+      El bucket del estado de Terraform cifra en reposo con SSE-S3 (AES256), no con una CMK
+      de KMS propia. Floci no aplica el SSE-KMS por defecto del bucket a los objetos, así
+      que la CMK no es verificable aquí; en AWS real aportaría control de acceso a la clave
+      y auditoría (pendiente).
+
+  - id: AWS-0039
+    paths:
+      - infra/terraform/modules/eks/main.tf
+    expired_at: 2027-05-16
+    statement: >-
+      El clúster EKS no cifra los Secrets de Kubernetes con una clave KMS (encryption_config).
+      En Floci, EKS es un k3s sin integración con KMS (el cifrado sería solo metadato) y no
+      implementa AssociateEncryptionConfig; los Secrets del proyecto solo contienen
+      credenciales ficticias. En AWS real debe habilitarse antes de guardar secretos reales
+      (pendiente).

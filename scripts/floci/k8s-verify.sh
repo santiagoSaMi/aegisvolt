@@ -6,9 +6,11 @@
 # Comprueba con el clúster real:
 #   1. NetworkPolicies aplicadas (conexiones permitidas y denegadas entre pods);
 #   2. seguridad de los pods (no root, sistema de archivos de solo lectura);
-#   3. una SAGA real por la web (port-forward → nginx → graphql-api → servicios → Floci);
+#   3. una SAGA real por la web (port-forward → nginx → graphql-api → servicios → Floci), con el
+#      resultado que corresponde a las flags del ambiente;
 #   4. logs de los servicios en CloudWatch (/aegisvolt/<env>/<servicio>) vía Fluent Bit,
-#      con el mismo correlation_id, y la métrica SagaCompleted.
+#      con el mismo correlation_id, y la métrica del resultado esperado (SagaCompleted, o
+#      SagaCompensated si el ambiente tiene encendida SIMULATE_CHARGER_HARDWARE_FAULT).
 # Imprime una tabla Markdown y la guarda en infra/local/floci/.tmp/k8s-<env>/verify.md.
 source "$(dirname "$0")/lib.sh"
 
@@ -75,6 +77,18 @@ TOKEN="$(curl -fsS http://127.0.0.1:18080/auth/cognito -H 'content-type: applica
   -H 'x-amz-target: AWSCognitoIdentityProviderService.InitiateAuth' \
   -d "{\"AuthFlow\":\"USER_PASSWORD_AUTH\",\"ClientId\":\"${COGNITO_CLIENT_ID}\",\"AuthParameters\":{\"USERNAME\":\"operador\",\"PASSWORD\":\"${DEMO_PASSWORD}\"}}" \
   | jq -r .AuthenticationResult.IdToken)"
+# Resultado esperado según la flag del AMBIENTE (catálogo: SIMULATE_CHARGER_HARDWARE_FAULT
+# arranca encendida en test para demostrar la compensación, ADR-0025): encendida → la SAGA
+# compensa (COMPENSATED, métrica SagaCompensated); apagada → COMPLETED (SagaCompleted).
+FAULT_FLAG="$(aws dynamodb get-item --table-name "aegisvolt-feature-flags-${ENV}" \
+  --key '{"PK":{"S":"FLAG#SIMULATE_CHARGER_HARDWARE_FAULT"},"SK":{"S":"META"}}' \
+  --query 'Item.enabled.BOOL' --output text 2>/dev/null || echo error)"
+case "$FAULT_FLAG" in
+  True)  EXPECTED_STATUS=COMPENSATED; SAGA_METRIC=SagaCompensated ;;
+  False) EXPECTED_STATUS=COMPLETED;   SAGA_METRIC=SagaCompleted ;;
+  *) record "Flag SIMULATE_CHARGER_HARDWARE_FAULT" fail "no se pudo leer en aegisvolt-feature-flags-${ENV} (${FAULT_FLAG})"
+     EXPECTED_STATUS=COMPLETED; SAGA_METRIC=SagaCompleted ;;
+esac
 CORR="$(cat /proc/sys/kernel/random/uuid)"
 STARTED_AT="$(date -u -d '-1 min' +%FT%TZ)"
 CONNECTOR="$(curl -fsS http://127.0.0.1:18080/graphql -H 'content-type: application/json' -H "authorization: Bearer ${TOKEN}" \
@@ -82,7 +96,11 @@ CONNECTOR="$(curl -fsS http://127.0.0.1:18080/graphql -H 'content-type: applicat
 RESULT="$(curl -fsS http://127.0.0.1:18080/graphql -H 'content-type: application/json' -H "authorization: Bearer ${TOKEN}" -H "x-correlation-id: ${CORR}" \
   -d "{\"query\":\"mutation { reserveAndActivateCharging(input:{idempotencyKey:\\\"$(cat /proc/sys/kernel/random/uuid)\\\", stationId:\\\"${STATION}\\\", connectorId:\\\"${CONNECTOR}\\\", requestedEnergyKwh: 10}) { saga { status sagaId } } }\"}")"
 STATUS="$(echo "$RESULT" | jq -r '.data.reserveAndActivateCharging.saga.status')"
-[[ "$STATUS" == COMPLETED ]] && record "SAGA por la web" ok "COMPLETED (correlation_id ${CORR})" || record "SAGA por la web" fail "$RESULT"
+if [[ "$STATUS" == "$EXPECTED_STATUS" ]]; then
+  record "SAGA por la web" ok "${STATUS} (esperado con SIMULATE_CHARGER_HARDWARE_FAULT=${FAULT_FLAG}; correlation_id ${CORR})"
+else
+  record "SAGA por la web" fail "esperado ${EXPECTED_STATUS} (falla simulada=${FAULT_FLAG}): ${RESULT}"
+fi
 
 # --- 4. Logs reales en CloudWatch (Fluent Bit) y métrica ----------------------------------------
 SERVICES=(web graphql-api saga-orchestrator-service station-reservation-service billing-wallet-service energy-dispatch-service)
@@ -106,10 +124,10 @@ for s in "${SERVICES[@]}"; do
   fi
 done
 sleep 3
-value="$(aws cloudwatch get-metric-statistics --namespace "AegisVolt/${ENV}" --metric-name SagaCompleted --statistics Sum \
+value="$(aws cloudwatch get-metric-statistics --namespace "AegisVolt/${ENV}" --metric-name "$SAGA_METRIC" --statistics Sum \
   --start-time "$STARTED_AT" --end-time "$(date -u -d '+5 min' +%FT%TZ)" --period 3600 --query 'Datapoints[0].Sum' --output text)"
-[[ "$value" =~ ^[1-9] ]] && record "Métrica AegisVolt/${ENV} SagaCompleted" ok "Sum=${value} (metric filter sobre los logs reales)" \
-  || record "Métrica AegisVolt/${ENV} SagaCompleted" fail "Sum=${value}"
+[[ "$value" =~ ^[1-9] ]] && record "Métrica AegisVolt/${ENV} ${SAGA_METRIC}" ok "Sum=${value} (metric filter sobre los logs reales)" \
+  || record "Métrica AegisVolt/${ENV} ${SAGA_METRIC}" fail "Sum=${value}"
 
 {
   echo "# Verificación en el clúster aegisvolt-${ENV} (Floci) — $(date -u +%FT%TZ)"
