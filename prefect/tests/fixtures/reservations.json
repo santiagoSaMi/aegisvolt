@@ -1,0 +1,123 @@
+{
+  "now": "2026-11-14T12:00:00.000Z",
+  "description": "Respuestas de las APIs (formato de packages/contracts). `_scenario` documenta qué regla debe (o no) dispararse.",
+  "items": [
+    {
+      "_scenario": "Confirmada con carga activa: correcta",
+      "reservationId": "res_00000000-0000-4000-8000-000000000001",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000001",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "CONFIRMED",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T11:00:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "RES-001: su SAGA no existe (404)",
+      "reservationId": "res_00000000-0000-4000-8000-000000000030",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000030",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "HELD",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T12:02:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:50:00.000Z"
+    },
+    {
+      "_scenario": "RES-002: su SAGA está COMPENSATED",
+      "reservationId": "res_00000000-0000-4000-8000-000000000008",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000008",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "CONFIRMED",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T11:00:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "RES-003: SAGA COMPLETED con la reserva HELD",
+      "reservationId": "res_00000000-0000-4000-8000-000000000011",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000011",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "HELD",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T12:02:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "RES-005: hold de una SAGA detenida",
+      "reservationId": "res_00000000-0000-4000-8000-000000000012",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000012",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "HELD",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T12:02:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:20:00.000Z"
+    },
+    {
+      "_scenario": "RES-004: la carga terminó hace 1 h",
+      "reservationId": "res_00000000-0000-4000-8000-000000000013",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000013",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "CONFIRMED",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T11:00:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T10:00:00.000Z"
+    },
+    {
+      "_scenario": "Carga terminada hace 1 min: dentro de la tolerancia",
+      "reservationId": "res_00000000-0000-4000-8000-000000000014",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000014",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "CONFIRMED",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T11:00:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "Liberada: no es activa",
+      "reservationId": "res_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "RELEASED",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T11:00:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "Creada hace 30 s sin SAGA visible: aún no estable",
+      "reservationId": "res_00000000-0000-4000-8000-000000000031",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000031",
+      "fleetId": "fleet_alfa",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "HELD",
+      "fastChargeBoost": false,
+      "holdExpiresAt": "2026-11-14T12:02:00.000Z",
+      "createdAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:59:30.000Z"
+    }
+  ]
+}

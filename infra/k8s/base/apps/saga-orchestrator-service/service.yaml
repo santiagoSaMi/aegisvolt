@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: saga-orchestrator-service
+  labels:
+    app.kubernetes.io/name: saga-orchestrator-service
+    app.kubernetes.io/part-of: aegisvolt
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: saga-orchestrator-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

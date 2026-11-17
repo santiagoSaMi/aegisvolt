@@ -1,0 +1,76 @@
+# Análisis de salud de la versión canary de graphql-api (ADR-0032).
+#
+# 1. availability (proveedor web): /health/ready de los pods canary (Service
+#    graphql-api-canary) cada 10 s, 12 sondeos. Umbral: como máximo 1 fallo
+#    (disponibilidad ≥ 11/12 ≈ 91,7 %).
+# 2. error-rate (proveedor CloudWatch, CloudWatch de Floci): operaciones GraphQL de la
+#    versión canary en los últimos 3 min (métricas GraphqlOperations y
+#    GraphqlServerErrors por Version, metric filters de Terraform).
+#    - Muestra mínima: 30 operaciones. Con menos, la medición es INCONCLUSA y el
+#      Rollout se pausa: nunca se promueve con una muestra insuficiente.
+#    - Umbral: tasa de error del servidor ≤ 2 %; > 2 % es fallo.
+#    - 4 mediciones cada 30 s tras 60 s (llenado de la ventana); se tolera 1 fallo.
+# Floci no evalúa metric math: la tasa se calcula en la condición. Se comprueba el Id
+# de cada serie para que un cambio de orden haga fallar, no calcular mal.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: graphql-api-canary-health
+  namespace: aegisvolt
+spec:
+  args:
+    - name: canary-version
+    - name: environment
+      value: dev
+  metrics:
+    - name: availability
+      interval: 10s
+      count: 12
+      failureLimit: 1
+      successCondition: result == "ready"
+      provider:
+        web:
+          url: http://graphql-api-canary.aegisvolt.svc.cluster.local/health/ready
+          jsonPath: '{$.status}'
+          timeoutSeconds: 3
+    - name: error-rate
+      initialDelay: 60s
+      interval: 30s
+      count: 4
+      failureLimit: 1
+      successCondition: >-
+        result[0].Id == "ops" && result[1].Id == "errors" &&
+        sum(result[0].Values) >= 30 &&
+        sum(result[1].Values) / sum(result[0].Values) <= 0.02
+      failureCondition: >-
+        result[0].Id == "ops" && result[1].Id == "errors" &&
+        sum(result[0].Values) >= 30 &&
+        sum(result[1].Values) / sum(result[0].Values) > 0.02
+      provider:
+        cloudWatch:
+          interval: 3m
+          metricDataQueries:
+            - id: ops
+              metricStat:
+                metric:
+                  namespace: AegisVolt/{{args.environment}}
+                  metricName: GraphqlOperations
+                  dimensions:
+                    - name: ServiceName
+                      value: graphql-api
+                    - name: Version
+                      value: '{{args.canary-version}}'
+                period: 60
+                stat: Sum
+            - id: errors
+              metricStat:
+                metric:
+                  namespace: AegisVolt/{{args.environment}}
+                  metricName: GraphqlServerErrors
+                  dimensions:
+                    - name: ServiceName
+                      value: graphql-api
+                    - name: Version
+                      value: '{{args.canary-version}}'
+                period: 60
+                stat: Sum

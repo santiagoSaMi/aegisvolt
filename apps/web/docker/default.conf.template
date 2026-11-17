@@ -1,0 +1,61 @@
+# Plantilla procesada con envsubst al arrancar (imagen oficial de nginx): solo se
+# sustituyen variables de entorno definidas; las de nginx ($uri, $host…) no se tocan.
+map $host $aegisvolt_env {
+  default "${APP_ENV}";
+}
+
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  include /etc/nginx/snippets/security-headers.conf;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
+
+  # Configuración de ejecución del SPA (ADR-0017): la fija el despliegue, no el navegador.
+  location = /config.json {
+    default_type application/json;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-store" always;
+    return 200 '{"environment":"${APP_ENV}","graphqlUrl":"./graphql","auth":{"cognitoUrl":"./auth/cognito","clientId":"${COGNITO_CLIENT_ID}"},"pollingIntervalMs":${WEB_POLLING_INTERVAL_MS},"cities":${WEB_CITIES_JSON}}';
+  }
+
+  # GraphQL del mismo origen (sin CORS).
+  location = /graphql {
+    proxy_pass ${GRAPHQL_UPSTREAM}/graphql;
+    proxy_http_version 1.1;
+    proxy_set_header Host $proxy_host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 64k;
+    proxy_read_timeout 40s;
+  }
+
+  # Login de Cognito (InitiateAuth) del mismo origen: solo POST.
+  location = /auth/cognito {
+    limit_except POST { deny all; }
+    proxy_pass ${COGNITO_UPSTREAM}/;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_set_header Host $proxy_host;
+    client_max_body_size 8k;
+    proxy_read_timeout 10s;
+  }
+
+  # Recursos con hash: caché larga e inmutable.
+  location /assets/ {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location / {
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+    try_files $uri $uri/ /index.html;
+  }
+}

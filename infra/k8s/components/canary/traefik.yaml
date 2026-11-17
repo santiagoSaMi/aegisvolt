@@ -1,0 +1,38 @@
+# Reparto real del tráfico: Traefik balancea por PESO entre los Services estable y
+# canary (weighted round robin). Argo Rollouts escribe los pesos en cada paso; no se
+# fijan aquí (ver docs de Argo Rollouts para Traefik).
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: graphql-api-split
+  namespace: aegisvolt
+spec:
+  weighted:
+    services:
+      - name: graphql-api
+        port: 80
+      - name: graphql-api-canary
+        port: 80
+---
+# Entrada HTTP: /graphql al reparto ponderado; el resto (consola) a la web.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: aegisvolt
+  namespace: aegisvolt
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: PathPrefix(`/graphql`)
+      priority: 20
+      services:
+        - name: graphql-api-split
+          kind: TraefikService
+    - kind: Rule
+      match: PathPrefix(`/`)
+      priority: 10
+      services:
+        - name: web
+          port: 80

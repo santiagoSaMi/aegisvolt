@@ -1,0 +1,25 @@
+# web: tráfico permitido además de DNS y AWS (políticas comunes del namespace).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Punto de entrada (NLB/API Gateway en AWS; port-forward en local).
+    - ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: graphql-api
+      ports:
+        - port: 8080
+          protocol: TCP

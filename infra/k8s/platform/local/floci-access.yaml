@@ -1,0 +1,27 @@
+# El controlador de Argo Rollouts llega a Floci como `floci` (Service sin selector,
+# L-07); FLOCI_IP lo sustituye el script de despliegue.
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci
+  namespace: argo-rollouts
+spec:
+  ports:
+    - name: aws
+      port: 4566
+      targetPort: 4566
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: floci
+  namespace: argo-rollouts
+  labels:
+    kubernetes.io/service-name: floci
+addressType: IPv4
+ports:
+  - name: aws
+    port: 4566
+endpoints:
+  - addresses:
+      - FLOCI_IP

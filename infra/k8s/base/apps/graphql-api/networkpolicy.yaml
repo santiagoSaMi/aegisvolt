@@ -1,0 +1,34 @@
+# graphql-api: tráfico permitido además de DNS y AWS (políticas comunes del namespace).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: graphql-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: graphql-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Punto de entrada (NLB/API Gateway en AWS; port-forward en local).
+    - ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: station-reservation-service
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: billing-wallet-service
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: energy-dispatch-service
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: saga-orchestrator-service
+      ports:
+        - port: 8080
+          protocol: TCP

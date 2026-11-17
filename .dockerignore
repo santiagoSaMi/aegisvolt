@@ -1,0 +1,16 @@
+# Red de seguridad para builds con contexto en la raíz. Cada Dockerfile tiene su
+# propio <Dockerfile>.dockerignore (lista blanca) que BuildKit usa en su lugar.
+.git
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+**/*.tsbuildinfo
+infra/local/floci/data
+infra/local/floci/.tmp
+tests/e2e/.evidence
+prefect/.venv
+prefect/.prefect-home
+**/.terraform
+**/*.tfstate*

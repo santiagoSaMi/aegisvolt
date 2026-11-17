@@ -1,0 +1,14 @@
+# Entrada HTTP del clúster. En AWS: target del NLB interno (IPs de los pods, ADR-0034).
+# En Floci: NodePort 30080 (platform/local), target del NLB de Floci.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: traefik
+  ports:
+    - name: web
+      port: 80
+      targetPort: web

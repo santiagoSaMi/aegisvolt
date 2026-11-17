@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Plataforma de despliegue progresivo en el clúster LOCAL (Floci): Argo Rollouts +
+# Traefik, y acceso del controlador de Argo al CloudWatch de Floci (ADR-0032).
+# En AWS real se usan ../argo-rollouts y ../traefik sin este acceso (IRSA para CloudWatch).
+resources:
+  - ../argo-rollouts
+  - ../traefik
+  - floci-access.yaml
+secretGenerator:
+  # Credenciales FICTICIAS del emulador (CLAUDE.md).
+  - name: floci-aws
+    namespace: argo-rollouts
+    literals:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+patches:
+  - target:
+      kind: Deployment
+      name: argo-rollouts
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          # El SDK de AWS del controlador usa este endpoint para CloudWatch (verificado, ADR-0032).
+          name: AWS_ENDPOINT_URL
+          value: http://floci:4566
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - secretRef:
+              name: floci-aws
+  # Entrada desde el NLB de Floci (ADR-0034): el listener del NLB vive en el contenedor de
+  # Floci y reenvía al contenedor k3s (target ip) en este NodePort fijo, que es el
+  # ingress_target_port de infra/terraform/live/config/floci/target.tfvars. En AWS el
+  # Service sigue siendo ClusterIP y el NLB apunta a las IPs de los pods de Traefik.
+  - target:
+      kind: Service
+      name: traefik
+      namespace: traefik
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080

@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Clúster test (un clúster por ambiente, ADR-0012). Las imágenes las fija el
+# despliegue por commit (scripts/floci/k8s-deploy.sh: kustomize images sha-<commit>).
+resources:
+  - ../../base
+components:
+  # Local: AWS = Floci (endpoint, credenciales ficticias, logs). En AWS real se quita.
+  - ../../components/floci
+  # Canary de graphql-api (Argo Rollouts + Traefik); requiere infra/k8s/platform.
+  - ../../components/canary
+configMapGenerator:
+  - name: station-reservation-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+      - LOG_LEVEL=info
+      - DYNAMODB_TABLE_NAME=aegisvolt-reservations-test
+  - name: billing-wallet-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+      - LOG_LEVEL=info
+      - DYNAMODB_TABLE_NAME=aegisvolt-billing-test
+  - name: energy-dispatch-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+      - LOG_LEVEL=info
+      - DYNAMODB_TABLE_NAME=aegisvolt-dispatch-test
+  - name: saga-orchestrator-service-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+      - LOG_LEVEL=info
+      - DYNAMODB_TABLE_NAME=aegisvolt-sagas-test
+  - name: graphql-api-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+      - LOG_LEVEL=info
+  - name: web-config
+    namespace: aegisvolt
+    behavior: merge
+    literals:
+      - APP_ENV=test
+patches:
+  # Ambiente del colector de logs: /aegisvolt/test/<servicio> (ADR-0029).
+  - target:
+      kind: DaemonSet
+      name: fluent-bit
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: test
+  # Métricas del análisis canary en el namespace AegisVolt/test.
+  - target:
+      kind: AnalysisTemplate
+      name: graphql-api-canary-health
+    patch: |-
+      - op: replace
+        path: /spec/args/1/value
+        value: test
