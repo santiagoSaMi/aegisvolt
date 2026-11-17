@@ -140,6 +140,8 @@ jobs:
         run: |
           # `trivy config` acepta un solo directorio: la raíz, sin dependencias ni artefactos.
           skip=(--skip-dirs '**/node_modules' --skip-dirs '**/dist' --skip-dirs prefect --skip-dirs tests --skip-dirs '**/.terraform')
+          # Riesgos aceptados, acotados por archivo, justificados y con vencimiento.
+          skip+=(--ignorefile .trivyignore.yaml)
           "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format sarif --output "${RUNNER_TEMP}/trivy-config.sarif" .
           { echo '## Trivy config (HIGH, CRITICAL)'; echo '```'; "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format table .; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - if: env.CAN_UPLOAD == 'true'

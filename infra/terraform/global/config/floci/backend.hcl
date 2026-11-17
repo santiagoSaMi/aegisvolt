@@ -2,8 +2,7 @@
 bucket       = "aegisvolt-tfstate"
 key          = "global/terraform.tfstate"
 region       = "us-east-1"
-# false: no forzar SSE-S3; el bucket cifra por defecto con su clave KMS (bootstrap, AWS-0132).
-encrypt      = false
+encrypt      = true
 use_lockfile = true
 
 endpoints = {
