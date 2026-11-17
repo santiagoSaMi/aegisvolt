@@ -1,0 +1,110 @@
+{
+  "now": "2026-11-14T12:00:00.000Z",
+  "description": "Respuestas de las APIs (formato de packages/contracts). `_scenario` documenta qué regla debe (o no) dispararse.",
+  "items": [
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000001",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000001",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ACTIVE",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T10:00:00.000Z"
+    },
+    {
+      "_scenario": "SAGA-005",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000008",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000008",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ACTIVE",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T10:00:00.000Z"
+    },
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000010",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000010",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ABORTED",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z",
+      "endedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000011",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000011",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ACTIVE",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T10:00:00.000Z"
+    },
+    {
+      "_scenario": "RES-004",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000013",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000013",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "COMPLETED",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z",
+      "endedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000014",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000014",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "COMPLETED",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:59:00.000Z",
+      "endedAt": "2026-11-14T11:59:00.000Z"
+    },
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000015",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000015",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ACTIVE",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T10:00:00.000Z"
+    },
+    {
+      "_scenario": "",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000016",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000016",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "ABORTED",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z",
+      "endedAt": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "_scenario": "BIL-003",
+      "sessionId": "ses_00000000-0000-4000-8000-000000000020",
+      "sagaId": "saga_00000000-0000-4000-8000-000000000020",
+      "stationId": "st_bog-norte-01",
+      "connectorId": "cn_01",
+      "status": "FAILED",
+      "requestedEnergyKwh": 30,
+      "startedAt": "2026-11-14T10:00:00.000Z",
+      "updatedAt": "2026-11-14T11:00:00.000Z",
+      "endedAt": "2026-11-14T11:00:00.000Z"
+    }
+  ]
+}

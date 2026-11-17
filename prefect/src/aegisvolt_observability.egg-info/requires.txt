@@ -1,0 +1,7 @@
+prefect==3.9.0
+boto3==1.43.118
+
+[dev]
+pytest==9.2.0
+ruff==0.17.3
+mypy==2.4.1

@@ -1,0 +1,22 @@
+{
+  "name": "@aegisvolt/e2e-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pruebas E2E: los cuatro servicios reales contra Floci (SAGA Reservar y Activar Carga).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test:e2e": "vitest run",
+    "demo:web": "node src/demo-console.ts"
+  },
+  "devDependencies": {
+    "@aegisvolt/feature-flags": "workspace:*",
+    "@aws-sdk/client-cognito-identity-provider": "3.1163.0",
+    "@aws-sdk/client-dynamodb": "3.1163.0",
+    "@aws-sdk/lib-dynamodb": "3.1163.0",
+    "@types/node": "catalog:",
+    "playwright-core": "1.62.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

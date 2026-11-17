@@ -1,0 +1,23 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+  - tests/e2e
+
+# Versiones compartidas (fuente única). Cada paquete las declara con "catalog:"
+# para seguir siendo instalable/desplegable de forma independiente.
+catalog:
+  '@types/node': 26.6.6
+  pino: 10.4.0
+  typescript: 6.0.3
+  vitest: 5.1.0
+  zod: 4.6.7
+
+# Falla la instalación si la versión de Node no cumple "engines" (Node 26 LTS).
+engineStrict: true
+
+# Scripts de instalación de dependencias: pnpm los bloquea salvo decisión explícita.
+# - @apollo/protobufjs (de @apollo/server): revisado; su postinstall solo crea una
+#   carpeta para su CLI y avisa de versiones. No se necesita en ejecución → denegado.
+allowBuilds:
+  '@apollo/protobufjs': false

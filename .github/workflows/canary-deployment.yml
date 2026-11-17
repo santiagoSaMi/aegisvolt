@@ -1,0 +1,143 @@
+# Canary de graphql-api con Argo Rollouts en un ambiente TEMPORAL del runner (ADR-0032, ADR-0035).
+#
+# Coordina, no reparte: el tráfico lo reparte Argo Rollouts sobre el TraefikService y la
+# decisión la toma el AnalysisTemplate (disponibilidad + tasa de error en CloudWatch).
+# scripts/ci/canary-release.sh despliega la línea base como estable, libera el commit como
+# canary, genera el tráfico que el análisis necesita y espera el veredicto:
+#   - pasa  → Argo promueve (20 % → 50 % → 100 %);
+#   - falla → Argo aborta, el tráfico vuelve a la estable, el job falla y el informe registra
+#             el rollback (AnalysisRun y motivo);
+#   - inconcluso (muestra insuficiente) → se aborta: sin operador no se promueve.
+# Sin línea base comparable (primer despliegue con canary) se declara "no ejecutado".
+#
+# Ambiente efímero: no hay persistencia entre ejecuciones; el ambiente de deploy-floci.yml no
+# existe aquí y se reconstruye. Solo runners hospedados; nunca código de PRs.
+name: canary-deployment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Ambiente (debe coincidir con la rama)
+        required: true
+        type: string
+      baseline_ref:
+        description: Commit estable (vacío = el commit anterior)
+        required: false
+        type: string
+        default: ''
+      inject_failure:
+        description: Demostración de rollback (canary con un error de configuración)
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Commit estable (vacío = el commit anterior de la rama)
+        required: false
+        type: string
+        default: ''
+      inject_failure:
+        description: Demostrar el rollback (canary con STATION_RESERVATION_URL incorrecta)
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  resolve:
+    name: canary-resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - id: env
+        env:
+          # En workflow_call, el ambiente pedido debe ser la rama que se integró.
+          EXPECTED_ENVIRONMENT: ${{ inputs.environment }}
+        run: scripts/ci/resolve-environment.sh
+
+  canary:
+    name: canary-analysis
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    concurrency:
+      group: canary-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Línea base
+        id: baseline
+        env:
+          BASELINE_INPUT: ${{ inputs.baseline_ref }}
+        run: |
+          base="$BASELINE_INPUT"
+          # push de una rama nueva: github.event.before es 000…0 → commit anterior.
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then base="$(git rev-parse HEAD~1)"; fi
+          git rev-parse --verify "${base}^{commit}" >/dev/null
+          echo "sha=${base}" >> "$GITHUB_OUTPUT"
+          echo "Línea base: ${base}"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: kubectl fijado y verificado
+        run: scripts/ci/install-kubectl.sh
+
+      - name: Espacio y capacidad del runner (Floci + k3s + 7 imágenes)
+        run: |
+          scripts/ci/free-runner-disk.sh
+          scripts/ci/runner-preflight.sh 10 20
+
+      - name: Estable (línea base) → canary (commit) con Argo Rollouts
+        id: canary
+        env:
+          BASELINE: ${{ steps.baseline.outputs.sha }}
+          SCENARIO: ${{ inputs.inject_failure && 'failure' || 'success' }}
+        run: |
+          set +e
+          scripts/ci/canary-release.sh "$ENVIRONMENT" "$BASELINE" "$SCENARIO"
+          rc=$?
+          set -e
+          echo "exit=${rc}" >> "$GITHUB_OUTPUT"
+          # 3 = no ejecutado (sin línea base comparable): queda como aviso y en el resumen.
+          [[ "$rc" == 0 || "$rc" == 3 ]] || exit "$rc"
+
+      - name: Diagnóstico
+        if: failure()
+        run: scripts/ci/diagnostics.sh "$ENVIRONMENT"
+
+      - name: Evidencias del canary (sin credenciales)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canary-${{ needs.resolve.outputs.environment }}
+          path: |
+            infra/local/floci/.tmp/k8s-*/canary-*/report.md
+            infra/local/floci/.tmp/k8s-*/canary-*/timeline.tsv
+            infra/local/floci/.tmp/k8s-*/canary-*/traffic.log
+            infra/local/floci/.tmp/k8s-*/canary-*/analysisruns.json
+          if-no-files-found: ignore
+          retention-days: 14

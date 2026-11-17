@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Traefik v3.7.16 como traffic router del canary (ADR-0032): reparte por peso con un
+# TraefikService (weighted round robin), que actualiza Argo Rollouts.
+# vendor/ lo descarga y verifica scripts/k8s/vendor-platform.sh.
+namespace: traefik
+resources:
+  - namespace.yaml
+  - vendor/crds.yaml
+  - vendor/rbac.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+patches:
+  # La ServiceAccount del binding oficial está en `default`; aquí vive en `traefik`.
+  - target:
+      kind: ClusterRoleBinding
+      name: traefik-ingress-controller
+    patch: |-
+      - op: replace
+        path: /subjects/0/namespace
+        value: traefik

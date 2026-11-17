@@ -1,0 +1,13 @@
+# Configuración de pruebas: hosts simulados (httpx.MockTransport) y sin CloudWatch.
+[audit]
+lookback_hours = 24
+
+[cloudwatch]
+enabled = false
+
+[environments.dev]
+saga_orchestrator = "http://orchestrator.test"
+station_reservation = "http://stations.test"
+billing_wallet = "http://billing.test"
+energy_dispatch = "http://dispatch.test"
+graphql_api = "http://graphql.test"

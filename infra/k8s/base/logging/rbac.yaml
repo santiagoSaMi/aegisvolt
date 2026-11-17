@@ -1,0 +1,30 @@
+# El filtro `kubernetes` de Fluent Bit solo LEE metadatos de pods y namespaces.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-bit
+  namespace: logging
+  # AWS real: IRSA / Pod Identity con un rol que solo permite logs:CreateLogStream,
+  # logs:PutLogEvents y logs:DescribeLogStreams sobre /aegisvolt/<env>/* (fase de IaC).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluent-bit-read
+rules:
+  - apiGroups: ['']
+    resources: ['pods', 'namespaces']
+    verbs: ['get', 'list', 'watch']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluent-bit-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluent-bit-read
+subjects:
+  - kind: ServiceAccount
+    name: fluent-bit
+    namespace: logging

@@ -1,0 +1,130 @@
+# AegisVolt en contenedores, integrado con Floci (desarrollo local, ADR-0031).
+#
+#   scripts/local/compose.sh up      # bootstrap (tablas, Cognito), build y arranque
+#   scripts/local/compose.sh down
+#
+# Red: la de Floci (`aegisvolt-floci`, la crea su compose). Dentro de ella los
+# contenedores usan el nombre del servicio Floci (`http://floci:4566`) y los nombres de
+# servicio de este archivo; `localhost` dentro de un contenedor es el propio contenedor.
+# Puertos publicados solo en loopback (127.0.0.1).
+name: aegisvolt-local
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:size=16m
+  restart: unless-stopped
+  networks: [floci]
+
+x-node-env: &node-env
+  APP_ENV: local
+  LOG_LEVEL: info
+  AWS_REGION: us-east-1
+  AWS_ENDPOINT_URL: http://floci:4566
+  # Credenciales FICTICIAS del emulador (CLAUDE.md): nunca credenciales reales.
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  FEATURE_FLAGS_TABLE_NAME: aegisvolt-feature-flags-local
+
+services:
+  station-reservation:
+    <<: *hardening
+    image: aegisvolt/station-reservation:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: services/station-reservation/Dockerfile }
+    environment:
+      <<: *node-env
+      PORT: '4101'
+      DYNAMODB_TABLE_NAME: aegisvolt-reservations-local
+    ports: ['127.0.0.1:4101:4101']
+    stop_grace_period: 30s
+
+  billing-wallet:
+    <<: *hardening
+    image: aegisvolt/billing-wallet:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: services/billing-wallet/Dockerfile }
+    environment:
+      <<: *node-env
+      PORT: '4102'
+      DYNAMODB_TABLE_NAME: aegisvolt-billing-local
+    ports: ['127.0.0.1:4102:4102']
+    stop_grace_period: 30s
+
+  energy-dispatch:
+    <<: *hardening
+    image: aegisvolt/energy-dispatch:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: services/energy-dispatch/Dockerfile }
+    environment:
+      <<: *node-env
+      PORT: '4103'
+      DYNAMODB_TABLE_NAME: aegisvolt-dispatch-local
+      SHUTDOWN_GRACE_MS: '20000'
+    ports: ['127.0.0.1:4103:4103']
+    stop_grace_period: 30s
+
+  saga-orchestrator:
+    <<: *hardening
+    image: aegisvolt/saga-orchestrator:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: services/saga-orchestrator/Dockerfile }
+    environment:
+      <<: *node-env
+      PORT: '4100'
+      DYNAMODB_TABLE_NAME: aegisvolt-sagas-local
+      STATION_RESERVATION_URL: http://station-reservation:4101
+      BILLING_WALLET_URL: http://billing-wallet:4102
+      ENERGY_DISPATCH_URL: http://energy-dispatch:4103
+      HTTP_REQUEST_TIMEOUT_MS: '30000'
+      # Debe superar HTTP_REQUEST_TIMEOUT_MS (lo valida el servicio al arrancar).
+      SHUTDOWN_GRACE_MS: '35000'
+    ports: ['127.0.0.1:4100:4100']
+    stop_grace_period: 45s
+    depends_on:
+      station-reservation: { condition: service_healthy }
+      billing-wallet: { condition: service_healthy }
+      energy-dispatch: { condition: service_healthy }
+
+  graphql-api:
+    <<: *hardening
+    image: aegisvolt/graphql-api:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: apps/graphql-api/Dockerfile }
+    environment:
+      <<: *node-env
+      PORT: '4000'
+      STATION_RESERVATION_URL: http://station-reservation:4101
+      BILLING_WALLET_URL: http://billing-wallet:4102
+      ENERGY_DISPATCH_URL: http://energy-dispatch:4103
+      SAGA_ORCHESTRATOR_URL: http://saga-orchestrator:4100
+      # Con TLS en Floci, el `iss` de los tokens es https://floci:4566/<pool> (ADR-0029);
+      # el JWKS se descarga por HTTP dentro de la red.
+      COGNITO_ISSUER: ${COGNITO_ISSUER:?ejecute scripts/local/compose.sh}
+      COGNITO_JWKS_URL: ${COGNITO_JWKS_URL:?ejecute scripts/local/compose.sh}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:?ejecute scripts/local/compose.sh}
+      SHUTDOWN_GRACE_MS: '35000'
+    ports: ['127.0.0.1:4000:4000']
+    stop_grace_period: 45s
+    depends_on:
+      saga-orchestrator: { condition: service_healthy }
+
+  web:
+    <<: *hardening
+    image: aegisvolt/web:${AEGISVOLT_TAG:?ejecute scripts/local/compose.sh}
+    build: { context: ../../.., dockerfile: apps/web/Dockerfile }
+    environment:
+      APP_ENV: local
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:?ejecute scripts/local/compose.sh}
+      GRAPHQL_UPSTREAM: http://graphql-api:4000
+      COGNITO_UPSTREAM: http://floci:4566
+      WEB_CITIES_JSON: '["bogota","medellin"]'
+    tmpfs:
+      - /tmp:size=16m
+      - /etc/nginx/conf.d:size=1m,uid=101,gid=101
+    ports: ['127.0.0.1:8080:8080']
+    stop_grace_period: 30s
+    depends_on:
+      graphql-api: { condition: service_healthy }
+
+networks:
+  floci:
+    name: aegisvolt-floci
+    external: true
