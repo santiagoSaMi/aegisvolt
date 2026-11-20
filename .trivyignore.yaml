@@ -6,7 +6,34 @@
 # Cada exclusión está acotada a su archivo, justificada y VENCE: al vencer, Trivy vuelve a
 # reportar el hallazgo y el riesgo debe revisarse de nuevo.
 # Formato: https://trivy.dev/docs/v0.76/guide/configuration/filtering/ (experimental:
-# se carga con --ignorefile).
+# se carga con --ignorefile; lo usan los jobs `trivy-config` y `trivy-images`).
+
+# Vulnerabilidades de imágenes (job `trivy-images`, solo la puerta CRITICAL; el SARIF de Code
+# scanning las sigue mostrando). Riesgo aceptado TEMPORALMENTE (2026-11-19) hasta que exista una
+# imagen nginxinc/nginx-unprivileged:1.30-alpine con nginx >= 1.30.7 publicada hace >= 14 días;
+# entonces se sube el digest de apps/web/Dockerfile y se borran estas entradas.
+# Sin `purls`: estos CVE son exclusivos de nginx, que solo está en la imagen web.
+vulnerabilities:
+  - id: CVE-2026-113425
+    expired_at: 2026-12-19
+    statement: >-
+      nginx 1.30.6 (imagen web): use-after-free en el proxy de correo. El binario incluye el
+      módulo mail, pero la configuración (apps/web/docker/) no define ningún bloque mail.
+  - id: CVE-2026-121810
+    expired_at: 2026-12-19
+    statement: >-
+      nginx 1.30.6 (imagen web): use-after-free con HTTP/3. El binario incluye http_v3, pero el
+      servidor solo escucha `listen 8080;` (HTTP/1.1 plano, sin quic).
+  - id: CVE-2026-123007
+    expired_at: 2026-12-19
+    statement: >-
+      nginx 1.30.6 (imagen web): desbordamiento del control de flujo en HTTP/2. El binario
+      incluye http_v2, pero ningún listen activa http2.
+  - id: CVE-2026-123633
+    expired_at: 2026-12-19
+    statement: >-
+      nginx 1.30.6 (imagen web): use-after-free con HTTP/2. El binario incluye http_v2, pero
+      ningún listen activa http2.
 
 misconfigurations:
   - id: KSV-0118

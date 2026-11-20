@@ -176,6 +176,6 @@ Operación ante `COMPENSATION_FAILED` sin reintento programado:
 
 ```bash
 curl -s -X POST localhost:4100/v1/sagas/<sagaId>/compensation/retry -H "x-correlation-id: $(uuidgen)"
-# o, como tarea controlada (Job de Kubernetes):
+# o con el comando de operación (manual; no hay un Job de Kubernetes que lo ejecute):
 pnpm --filter @aegisvolt/saga-orchestrator-service saga:recover --retry <sagaId>
 ```

@@ -65,7 +65,10 @@ Vite reenvía `/graphql` al graphql-api (`:4000`) y `/auth/cognito` a Cognito en
 | `pnpm --filter @aegisvolt/web test` | 59 pruebas (Vitest + jsdom). Unitarias de modelos, auth y `config.json`. Componentes accesibles: tabla, campos, interruptor, diálogo, errores con `correlation_id`, login y ambiente. Integración de páginas con Apollo Client y `MockLink`: carga exitosa, compensada, con error y reintento con la misma clave de idempotencia; flags admin y operador, con confirmación y conflicto; observabilidad; transacciones |
 | `REQUIRE_INTEGRATION=true pnpm test:e2e` | E2E en **Chromium real** (`tests/e2e/test/web.e2e.test.ts`): login inválido; flujo exitoso hasta `COMPLETED`; flujo fallido en el que el administrador activa la falla desde la UI y la carga del operador termina `COMPENSATED`, con el historial visible en Observabilidad. Las capturas quedan en `tests/e2e/.evidence/web/` |
 
+## Imagen
+
+`apps/web/Dockerfile`: nginx sin root (usuario 101), con cabeceras de seguridad y CSP (`docker/security-headers.conf`) y proxies del mismo origen `/graphql` y `/auth/cognito` (`docker/default.conf.template`). `docker/10-validate-env.sh` impide arrancar sin la configuración del ambiente.
+
 ## Pendiente
 
-- Imagen nginx no root con CSP y proxy `/graphql` + `/auth/cognito`. Llega en la fase de contenedores, junto con los Dockerfiles de los servicios.
 - Login con Hosted UI o PKCE para AWS real (ADR-0027).

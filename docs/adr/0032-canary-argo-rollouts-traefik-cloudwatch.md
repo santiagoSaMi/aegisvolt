@@ -133,4 +133,4 @@ Sintaxis del resultado del proveedor CloudWatch (comprobada):
 
 ## Evidencia
 
-Ver [docs/runbooks/canary-demo.md](../runbooks/canary-demo.md).
+Ver [docs/runbooks/canary-rollback.md](../runbooks/canary-rollback.md).

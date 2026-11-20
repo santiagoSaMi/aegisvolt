@@ -1,6 +1,6 @@
 # AegisVolt en docker compose (integrado con Floci)
 
-Las seis imágenes en la red Docker de Floci (`aegisvolt-floci`). Dentro de la red, los contenedores usan `http://floci:4566` y los nombres de servicio, nunca `localhost`. Decisión: [ADR-0031](../../../docs/adr/0031-contenedores-kubernetes-floci.md). Comandos y troubleshooting: [runbook](../../../docs/runbooks/k8s-floci.md#2-ejecución-local-con-docker-compose).
+Las seis imágenes en la red Docker de Floci (`aegisvolt-floci`). Dentro de la red, los contenedores usan `http://floci:4566` y los nombres de servicio, nunca `localhost`. Decisión: [ADR-0031](../../../docs/adr/0031-contenedores-kubernetes-floci.md). Comandos y troubleshooting: [runbook](../../../docs/runbooks/kubernetes.md#2-ejecución-local-con-docker-compose).
 
 ```bash
 scripts/floci/start.sh

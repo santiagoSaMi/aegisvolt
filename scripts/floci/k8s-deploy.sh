@@ -12,7 +12,7 @@
 # La infraestructura es de Terraform (ADR-0033) y debe existir antes:
 #   scripts/floci/terraform-global.sh apply      (repositorios ECR)
 #   scripts/floci/terraform-live.sh <env> apply  (red, tablas, IAM, clúster EKS, log groups)
-# Nunca destruye nada; para borrar el clúster ver docs/runbooks/k8s-floci.md.
+# Nunca destruye nada; para borrar el clúster ver docs/runbooks/kubernetes.md.
 source "$(dirname "$0")/lib.sh"
 
 ENV="${1:-}"; shift || true

@@ -39,8 +39,11 @@ Los rulesets exigen después el método de merge **por rama** (squash en `dev`, 
 | · Require conversation resolution before merging | ✅ | ✅ | ✅ |
 | · Merge method (allowed) | **Squash** | **Merge** | **Merge** |
 | Require status checks to pass | ✅ (lista abajo) | ✅ | ✅ |
-| · Require branches to be up to date before merging | ✅ | ✅ | ✅ |
+| · Require branches to be up to date before merging | ✅ | ❌ | ❌ |
+| Require linear history | ✅ (opcional) | **❌** | **❌** |
 
+- **Linear history solo en `dev`:** una promoción `dev → test` o `test → prod` se fusiona con *merge commit*, que no es historia lineal. Con *Require linear history* activo en `test` o `prod`, GitHub bloquea el merge ("Merging is blocked"); se comprobó en la primera promoción. En `dev` es compatible, porque allí solo se usa *squash*.
+- **"Up to date" solo en `dev`:** en `test` y `prod` la rama origen es siempre `dev` o `test`. Exigir que esté al día con la destino obliga a fusionar la destino en la origen, lo que va contra el flujo lineal de promoción. En `dev` sí protege contra PR de *features* basados en un `dev` antiguo.
 - **Push directo:** con *Require a pull request before merging* y la bypass list vacía, todo cambio a la rama debe llegar por PR. Un `git push origin dev` es rechazado (`GH013: Repository rule violations`).
 - **Aprobaciones = 0:** en un proyecto individual, el autor no puede aprobar su propio PR, así que 1 aprobación bloquearía todo merge. Si hay otro colaborador con permiso de escritura, súbalo a 1 en `test` y `prod`.
 - **Plan Free:** la documentación garantiza la protección de ramas en repositorios públicos de GitHub Free; para los *rulesets* la página es ambigua. Si **Settings → Rules → Rulesets** no está disponible, use **Settings → Branches → Add branch protection rule** con las mismas opciones:
@@ -77,7 +80,7 @@ Los checks solo aparecen en el buscador de **Add checks** después de haberse ej
 | `codeql (javascript-typescript)`, `codeql (python)`, `codeql (actions)` | `security` | Análisis de código |
 | `trivy-images` | `security` | Vulnerabilidades CRITICAL con parche en las imágenes |
 
-`trivy-config` es informativo: no lo marque como obligatorio. Tampoco los jobs de despliegue (`deploy`, `canary-analysis`), que corren después del merge.
+`trivy-config` es informativo: no lo marque como obligatorio. Tampoco marque como obligatorio el check **Code scanning results / Trivy** que GitHub crea al subir los SARIF: sus alertas aceptadas se gestionan en `.trivyignore.yaml` ([ADR-0036](../adr/0036-riesgos-trivy-aceptados-y-reversion-kms.md)). Tampoco los jobs de despliegue (`deploy`, `canary-analysis`), que corren después del merge.
 
 ## 3. Environments `dev`, `test` y `prod` (ya existen)
 
@@ -120,7 +123,7 @@ Todas las Actions están fijadas por SHA completo en los workflows. Sin runners 
 | Dependabot alerts | ✅ | |
 | Dependabot security updates | ✅ | Las versiones las propone `.github/dependabot.yml` contra `dev` (cooldown de 14 días) |
 | Secret scanning + Push protection | ✅ | Disponible en repositorios públicos |
-| Code scanning → CodeQL | **No** active *Default setup* | El workflow `security` hace un *advanced setup* y los dos se excluyen |
+| Code scanning → CodeQL | **Desactive** *Default setup* | El workflow `security` hace un *advanced setup* y los dos se excluyen: con el *default setup* activo, los jobs `codeql` fallan al subir sus resultados (ocurrió en la primera ejecución) |
 
 ## 6. Qué hace cada workflow (resumen)
 
@@ -194,8 +197,34 @@ gh pr create --base prod --head test --title "release: test → prod" --body "Pr
 ## 8. Lista de verificación
 
 - [ ] Merge commits y squash habilitados; rebase deshabilitado; borrado automático de ramas activado; rama por defecto `dev`.
-- [ ] Rulesets `protect-dev` (squash), `protect-test` y `protect-prod` (merge), activos, sin bypass, con los checks de la sección 2 (incluido `ci-result`).
+- [ ] Rulesets `protect-dev` (squash, linear history, "up to date"), `protect-test` y `protect-prod` (merge, **sin** linear history ni "up to date"), activos, sin bypass, con los checks de la sección 2 (incluidos `ci-result` y `terraform-plan`).
 - [ ] Environments: ramas permitidas = la propia; `prod` sin bypass de administradores; revisores solo si hay otro revisor.
 - [ ] Actions: aprobación para colaboradores externos; token de solo lectura por defecto; sin runners self-hosted.
 - [ ] Dependabot, secret scanning con push protection y sin CodeQL *default setup*.
 - [ ] Pruebas 7.1–7.4 ejecutadas y evidencias revisadas.
+
+## 9. Estado verificado (2026-11-19)
+
+Consultado con `gh api repos/{owner}/{repo}/rules/branches/<rama>` (`infra/local/floci/.tmp/audit-20261119/github-rules.txt`):
+
+| Regla | `dev` | `test` | `prod` |
+| --- | --- | --- | --- |
+| Restrict deletions | ✅ | ✅ | ✅ |
+| Block force pushes (`non_fast_forward`) | ✅ | ✅ | ✅ |
+| Pull request, método permitido | squash, 0 aprobaciones | merge, 0 aprobaciones | merge, 0 aprobaciones |
+| Linear history | ✅ | ❌ | ❌ |
+| Status checks (strict = "up to date") | 20, strict | 20, no strict | 20, no strict |
+| `terraform-plan` obligatorio | ✅ (re-agregado) | ✅ | ✅ |
+
+**`terraform-plan` en `protect-dev`:** se retiró temporalmente para fusionar el PR #18 y el propietario lo volvió a agregar después de la auditoría. La API confirma los 20 checks. Si alguna vez hay que retirarlo, vuelva a agregarlo en **Settings → Rules → Rulesets → protect-dev → Require status checks to pass → Add checks → `terraform-plan`**: §3.1 de la especificación lo exige antes del merge.
+
+**Promociones verificadas:**
+- PR #15 y #20 (`dev → test`);
+- PR #21 (`test → prod`).
+
+`deploy-floci` terminó en *success* en las tres ramas:
+- `dev`: `4e6e269`;
+- `test`: `9626f5e`;
+- `prod`: `077be0d`, al tercer intento por un arranque fallido de k3s en el runner (L-19).
+
+**No ejecutado todavía:** la prueba negativa de la sección 7.1 (`git push` directo y `--force` rechazados con `GH013`). Las reglas que la producen están verificadas en la tabla de arriba. La [guía de sustentación §6.2.1](../guia-sustentacion.md#621-intente-hacer-un-git-push---force-o-un-push-directo-a-la-rama-test-desde-su-terminal-y-muestre-qué-regla-del-repositorio-lo-bloquea) tiene un procedimiento seguro, con commits vacíos.
