@@ -283,3 +283,13 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
   No uses `pkill -f port-forward`: el patrón puede coincidir con la propia shell que lo ejecuta.
 - **Pendiente:** un `trap` que los cierre en los dos scripts.
 
+
+## L-21 · CVE críticos de nginx en la imagen `web`, aceptados temporalmente
+
+- **Hallazgo** (job `trivy-images`, 2026-11-19, sin cambios en el código: se actualizó la base de datos de Trivy): nginx `1.30.6-r1` de `nginxinc/nginx-unprivileged:1.30-alpine` tiene CVE-2026-113425 (proxy de correo), CVE-2026-121810 (HTTP/3), CVE-2026-123007 y CVE-2026-123633 (HTTP/2). Todos son CRITICAL y están corregidos en `1.30.7-r0`.
+- **Por qué no es explotable aquí:** el binario incluye los módulos `mail`, `http_v2` y `http_v3`, pero la configuración efectiva de la imagen solo tiene `listen 8080;`. Es HTTP/1.1 plano, sin `http2`, sin `quic` y sin bloque `mail` (verificado con `grep` sobre `/etc/nginx` dentro de la imagen).
+- **Por qué no se actualizó nginx:**
+  - `apk add --upgrade nginx` instalaría el nginx de Alpine, que es otro paquete, en lugar del de nginx.org que trae la imagen base.
+  - La imagen base corregida es demasiado reciente para la regla de 14 días.
+- **Decisión:** los 4 CVE se excluyen de la puerta CRITICAL en `.trivyignore.yaml`, con justificación y vencimiento el **2026-12-19**. `trivy-images` ahora pasa `--ignorefile .trivyignore.yaml` solo a la puerta. El SARIF de Code scanning sigue mostrándolos.
+- **Pendiente:** subir el digest de la imagen base en `apps/web/Dockerfile` cuando exista una con nginx ≥ 1.30.7 publicada hace al menos 14 días, y borrar las 4 entradas.
