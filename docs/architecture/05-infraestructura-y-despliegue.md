@@ -59,7 +59,7 @@ terraform workspace select dev && terraform state push restored.tfstate     # o 
 terraform plan   # debe mostrar exactamente la diferencia esperada
 ```
 
-Runbook: [terraform-floci.md](../runbooks/terraform-floci.md).
+Runbook: [terraform.md](../runbooks/terraform.md).
 
 ## 15. EKS/Kubernetes, despliegues y canary
 
@@ -102,7 +102,7 @@ infra/k8s/
   1. **Disponibilidad:** `/health/ready` del canary cada 10 s, al menos 11 de 12 sondeos.
   2. **Tasa de error del servidor:** métricas `GraphqlOperations` y `GraphqlServerErrors` por `Version`, que generan los metric filters sobre el log `graphql_operation`. Umbral ≤ 2 % con **al menos 30 operaciones** en 3 min; con menos, la medición es Inconclusive y el Rollout se pausa.
   3. **Resultados de negocio:** errores de cliente y SAGAs `COMPENSATED` no cuentan como error. Así, la demo de fallos no provoca un rollback.
-- **Evidencia** (promoción, rollback inducido y pausa por muestra insuficiente, con el tráfico medido por respuesta): [runbook](../runbooks/canary-demo.md).
+- **Evidencia** (promoción, rollback inducido y pausa por muestra insuficiente, con el tráfico medido por respuesta): [runbook](../runbooks/canary-rollback.md).
 
 ## Diagrama de despliegue
 

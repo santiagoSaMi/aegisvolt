@@ -132,6 +132,6 @@ Datos verificados en la documentación de GitHub:
   - Los ambientes de CI son **temporales**: el despliegue post-merge no actualiza el Floci persistente del autor, que se sigue desplegando a mano con `scripts/floci/*`.
   - El canary corre en un ambiente reconstruido, no en el que desplegó `deploy`.
   - Tiempo: `deploy` y `canary` tardan decenas de minutos cada uno; los runners públicos no consumen minutos de pago.
-  - La primera ejecución en GitHub destapó cinco problemas que solo aparecen en un runner limpio, ya corregidos. Pasaron CI, `terraform-plan`, `security` y `deploy`; el canary falló al construir una línea base anterior a esas correcciones. Detalle en [L-15](../limitations.md#l-15--cicd-ambientes-efímeros-en-runners-hospedados).
+  - La primera ejecución en GitHub destapó cinco problemas que solo aparecen en un runner limpio, ya corregidos. Pasaron CI, `terraform-plan`, `security` y `deploy`; el canary falló al construir una línea base anterior a esas correcciones. En el merge siguiente, el canary corrió de punta a punta en el runner y Argo **promovió** (79,2/20,8 al 80/20 y 47,7/52,3 al 50/50, sin errores). Detalle en [L-15](../limitations.md#l-15--cicd-ambientes-efímeros-en-runners-hospedados).
   - **Línea base que no se puede construir** (defecto ya corregido o cambio externo): el canary se declara "no ejecutado", porque no hay versión estable que comparar. La línea base se construye antes de levantar el ambiente.
 - **Configuración manual:** [github-repository-settings.md](../runbooks/github-repository-settings.md).

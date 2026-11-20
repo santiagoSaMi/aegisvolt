@@ -1,4 +1,4 @@
-# Runbook: logs y métricas en CloudWatch (Floci)
+# Runbook: observabilidad (CloudWatch y Prefect, Floci)
 
 Muestra la centralización de logs por ambiente, las métricas de la SAGA y el rastreo de una SAGA fallida por `correlation_id` ([ADR-0028](../adr/0028-logging-estructurado-operation-errores-tipados.md), [ADR-0029](../adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md)). Usa solo credenciales ficticias.
 
@@ -70,4 +70,44 @@ aws cloudwatch get-metric-statistics --namespace AegisVolt/dev --metric-name Ser
 aws cloudwatch describe-alarms --alarm-name-prefix aegisvolt-dev- --query 'MetricAlarms[].[AlarmName,StateValue]' --output table
 ```
 
-Las aplicaciones reales se desplegarán en el clúster en la fase de Kubernetes. Hasta entonces, la evidencia con los servicios reales es el E2E (`tests/e2e/.evidence/logs/`, ADR-0028), y la del colector es el paso 3.
+Con las aplicaciones desplegadas en el clúster `dev` (`scripts/floci/k8s-deploy.sh dev`), `scripts/floci/k8s-verify.sh dev` comprueba además que una SAGA real deja sus logs en los cinco grupos y que su métrica (`SagaCompleted` o `SagaCompensated`, según la flag de falla del ambiente) aumenta. Sin clúster, la evidencia con los servicios reales es el E2E (`tests/e2e/.evidence/logs/`, ADR-0028).
+
+## 6. Prefect: salud de los ambientes y auditoría de la SAGA (§2.5, §6.4)
+
+Diseño: [ADR-0030](../adr/0030-prefect-auditoria-solo-lectura-por-apis.md). Instalación, reglas y configuración: [prefect/README.md](../../prefect/README.md). Prefect solo lee por las APIs de los servicios; no tiene credenciales de las tablas.
+
+### 6.1 Contra el clúster `dev` de Floci
+
+El repositorio no trae una configuración de Prefect para el clúster (limitación L-18): `prefect/config/local.toml` apunta a `pnpm dev` (puertos 4100–4103 y 4000) y `config/demo.toml` al stack del E2E. Para el clúster se abren `port-forward` a los cinco Services y se usa una copia de `local.toml` con esos puertos, **fuera del repositorio**:
+
+```bash
+S=infra/local/floci/.tmp/k8s-dev
+k() { (set -a; source $S/kube-credentials.env; set +a; KUBECONFIG=$S/kubeconfig kubectl "$@"); }
+k -n aegisvolt port-forward svc/saga-orchestrator-service   25100:80 &
+k -n aegisvolt port-forward svc/station-reservation-service 25101:80 &
+k -n aegisvolt port-forward svc/billing-wallet-service      25102:80 &
+k -n aegisvolt port-forward svc/energy-dispatch-service     25103:80 &
+k -n aegisvolt port-forward svc/graphql-api                 25104:80 &
+
+sed -e 's/:4100"/:25100"/' -e 's/:4101"/:25101"/' -e 's/:4102"/:25102"/' -e 's/:4103"/:25103"/' \
+    -e 's/:4000"/:25104"/' prefect/config/local.toml > /tmp/k8s-dev.toml   # solo cambia [environments.dev]
+
+cd prefect
+export PREFECT_HOME=$PWD/.prefect-home PREFECT_API_URL=http://127.0.0.1:4200/api
+.venv/bin/prefect server start --host 127.0.0.1 --port 4200     # en otra terminal; dashboard http://127.0.0.1:4200
+export AEGISVOLT_AUDIT_CONFIG=/tmp/k8s-dev.toml
+.venv/bin/python -c "from aegisvolt_observability.flows import environment_health_monitor as f; f(environments=['dev','test','prod'])"
+.venv/bin/python -c "from aegisvolt_observability.flows import saga_consistency_audit as f; f(environment='dev')"
+```
+
+Al terminar, detén los `port-forward` (`kill %1 %2 %3 %4 %5` en la misma shell) y el servidor de Prefect.
+
+Resultado de la auditoría del 2026-11-19 (`infra/local/floci/.tmp/audit-20261119/24-prefect-live.log` y `25-prefect-saga-audit.log`):
+
+- `environment_health_monitor`: `dev` **OPERATIONAL** (5 unidades listas y log groups presentes); `test` y `prod` **DOWN**, porque localmente solo `dev` tiene clúster (L-11). Es el estado real, no un fallo de Prefect. Publicó 18 métricas en `AegisVolt/Audit`.
+- `saga_consistency_audit` de `dev`: 3 SAGAs revisadas (2 COMPLETED, 1 COMPENSATED), **0 hallazgos**, 7 métricas publicadas.
+
+### 6.2 Si el servidor de Prefect falla con `database is locked`
+
+Ocurre con el servidor efímero que Prefect arranca solo cuando no hay `PREFECT_API_URL`. Arranca un servidor dedicado (`prefect server start`) con su propio `PREFECT_HOME`, como arriba, y exporta `PREFECT_API_URL` antes de ejecutar los flows.
+

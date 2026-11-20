@@ -89,4 +89,4 @@ aws --endpoint-url http://localhost:4566 dynamodb query --table-name aegisvolt-f
   --expression-attribute-values '{":pk":{"S":"FLAG#ENABLE_DYNAMIC_SURGE_PRICING"},":a":{"S":"AUDIT#"}}'
 ```
 
-En el frontend (fase posterior), la query `featureFlags` de `dev` mostrará el cambio en ≤ 5 s y la de `prod` seguirá igual.
+En la consola web, la página **Feature flags** de `dev` muestra el cambio en el siguiente refresco (polling de 5 s) y el comportamiento de los servicios cambia en ≤ 5 s, sin redespliegue. El paso a paso en el clúster está en la [guía de sustentación §6.4.2](../guia-sustentacion.md#642-cambie-el-estado-de-una-feature-flag-en-dev-sin-redesplegar-el-código-y-muestre-cómo-cambia-el-comportamiento-en-el-frontend-web-de-dev-mientras-prod-permanece-intacto).

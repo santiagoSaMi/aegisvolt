@@ -178,8 +178,10 @@ jobs:
             # SARIF completo (HIGH y CRITICAL) para Code scanning.
             "${RUNNER_TEMP}/trivy" image --format sarif --output "${RUNNER_TEMP}/sarif/${app}.sarif" \
               --severity HIGH,CRITICAL "$img"
-            # Puerta: CRITICAL con parche disponible.
-            "${RUNNER_TEMP}/trivy" image --severity CRITICAL --ignore-unfixed --exit-code 1 --format table "$img" \
+            # Puerta: CRITICAL con parche disponible, salvo los riesgos aceptados (con vencimiento)
+            # de .trivyignore.yaml. El SARIF de arriba sigue completo: Code scanning los muestra.
+            "${RUNNER_TEMP}/trivy" image --severity CRITICAL --ignore-unfixed --exit-code 1 --format table \
+              --ignorefile .trivyignore.yaml "$img" \
               || status=1
           done
           exit "$status"

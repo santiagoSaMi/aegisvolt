@@ -76,7 +76,7 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Lo que sí se verificó con el canary** (2026-11-15, Argo Rollouts v1.10.1, [ADR-0032](adr/0032-canary-argo-rollouts-traefik-cloudwatch.md)):
   - El proveedor `cloudWatch` del núcleo de Argo lee `GetMetricData` del CloudWatch de Floci (`AWS_ENDPOINT_URL` en el controlador).
   - Las mediciones usan métricas reales: logs de graphql-api → Fluent Bit → metric filters de Terraform → métricas por `Version`.
-  - Una promoción y un abort reales dependieron de esas mediciones ([runbook](runbooks/canary-demo.md)).
+  - Una promoción y un abort reales dependieron de esas mediciones ([runbook](runbooks/canary-rollback.md)).
 - **Diferencias y pendientes en AWS real:**
   - La tasa se calcula en la condición del análisis con dos series, porque Floci no tiene *metric math*. En AWS podría usarse una expresión `errors/ops`, pero no hace falta.
   - **Pendiente de validar en AWS real:**
@@ -113,7 +113,7 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
 - **Mitigación:**
   - uso exclusivamente local;
   - abrir la consola solo cuando se necesite y detenerla al terminar (`docker stop floci-aws-ui`);
-  - para consultas, preferir AWS CLI, que solo usa `127.0.0.1:4566` ([runbook](runbooks/cloudwatch-demo.md));
+  - para consultas, preferir AWS CLI, que solo usa `127.0.0.1:4566` ([runbook](runbooks/observability.md));
   - más adelante se puede revisar `FLOCI_SERVICES_EKS_ENDPOINT_HOST`.
 
 ## L-08 · Floci no evalúa IAM: el aislamiento de flags por ambiente no depende de políticas
@@ -218,10 +218,78 @@ Cada limitación indica el requisito afectado de `proyecto_final.md` y la propue
     5. CVE-2026-111497 (crítica) en `brotli-libs` de la imagen `web`: actualización a 1.2.1-r0.
   - **`deploy` (post-merge a `dev`):** pasó. Creó, desplegó y verificó el ambiente temporal completo.
   - **`canary-analysis`:** falló al construir la **línea base** (`d2824c9`), que aún tenía el defecto 2 en sus Dockerfiles. Es transitorio: la próxima línea base ya incluye el arreglo. Desde entonces, una línea base que no se puede construir se declara "canary no ejecutado" en vez de fallar, y se construye antes de levantar Floci.
-- **Pendiente de verificar en GitHub:**
-  - un canary ejecutado de punta a punta en el runner; lo probará el siguiente merge a `dev`, por ejemplo el PR de prueba 7.1 del runbook;
-  - las promociones `dev → test` y `test → prod`.
+- **Canary verificado en GitHub** (merge de `fix/canary-baseline-build` a `dev`, 2026-11-16):
+  - línea base `sha-89fa268b426b` como estable y `sha-136d88df6702` como canary, en el ambiente temporal del runner;
+  - **desenlace: Promoted**;
+  - tráfico medido en las respuestas (`x-service-version`), sin errores del canary:
+
+    | Pesos TraefikService (estable/canary) | Respuestas | Estable | Canary |
+    | --- | --- | --- | --- |
+    | antes de publicar | 66 | 100,0 % | 0,0 % |
+    | 80/20 | 880 | 79,2 % | 20,8 % |
+    | 50/50 | 917 | 47,7 % | 52,3 % |
+    | 100/0 (promovido) | 237 | 0,0 % | 100,0 % |
+
+  - La fila de transición 100/0 → 80/20 (9,8 % canary) es el efecto de borde del muestreo cada 5 s, ya documentado en el runbook del canary.
+- **Promociones verificadas en GitHub** (2026-11-17): PR #20 `dev → test` y PR #21 `test → prod`, fusionados con *merge commit*. `deploy-floci` terminó en *success* en las tres ramas: `dev` `4e6e269`, `test` `9626f5e` y `prod` `077be0d`.
+  - En `test`, la SAGA de verificación terminó `COMPENSATED`, que es lo esperado porque `SIMULATE_CHARGER_HARDWARE_FAULT` está activa en `test`. `k8s-verify.sh` ajusta lo que espera según la flag del ambiente.
+  - El canary corrió en `dev` y en `test`. En `prod` se declaró "canary no ejecutado": la línea base (`97c19ce`) no tenía el canary de Argo, porque era el primer despliegue de `prod` con él. No hay evidencia de canary en `prod` hasta el próximo despliegue.
+  - El despliegue de `prod` necesitó tres intentos por un arranque fallido de k3s en el runner (L-19).
 - **Verificado localmente antes del push:**
   - los scripts (`promotion-guard` con pruebas, `resolve-environment`, `terraform-static-checks`, `terraform-pr-plan` en sus dos modos, `floci-environment` y `canary-release`);
   - el canary del CI contra el `dev` local: línea base `3ba2dc3` estable, el commit como canary, y Argo promovió con 78,7/21,3 y 49,3/50,7.
   - No se pudieron ejecutar `actionlint` ni Gitleaks localmente: se denegó descargar y ejecutar sus binarios en esta sesión. Su lugar lo ocupan `scripts/ci/check-workflows.py`, que ya detectó un error real de YAML, y el informe de hallazgos de Gitleaks en el propio job.
+
+## L-16 · Tres hallazgos de Trivy aceptados como riesgo
+
+- **Requisito:** buenas prácticas de seguridad (CLAUDE.md) y el job `trivy-config` (ADR-0035).
+- **Estado:** KSV-0118 (Fluent Bit sin `securityContext` de pod), AWS-0132 (bucket de estado sin CMK propia) y AWS-0039 (Secrets de EKS sin cifrado KMS) están excluidos en `.trivyignore.yaml`. Cada exclusión está acotada a su archivo, justificada y vence el 2027-05-16 ([ADR-0036](adr/0036-riesgos-trivy-aceptados-y-reversion-kms.md)).
+- **Por qué no se corrigieron:** el intento se revirtió por L-17. En local, los Secrets solo contienen credenciales ficticias.
+- **En AWS real:** CMK propia para el bucket y `encryption_config` al **crear** el clúster, antes de guardar cualquier secreto real.
+
+## L-17 · KMS en Floci: sin `AssociateEncryptionConfig` ni SSE-KMS efectivo en S3
+
+- **Comportamiento observado** (Floci 2.4.0, 2026-11-16, despliegue de `dev` en el runner):
+  - **EKS:** agregar `encryption_config` a un clúster existente falla, porque Floci no implementa `AssociateEncryptionConfig`. El k3s de Floci no se integra con KMS.
+  - **S3:** la configuración SSE-KMS por defecto del bucket se guarda, pero no se aplica a los objetos nuevos.
+- **Consecuencia:** el cifrado con KMS no es verificable en local. Se revirtió y se documentó como riesgo aceptado (L-16).
+
+## L-18 · Prefect no trae configuración para el clúster
+
+- **Requisito:** §2.5, flujos que monitorean los tres ambientes.
+- **Estado:** `prefect/config/local.toml` apunta a `pnpm dev` y `config/demo.toml` al stack del E2E. Contra el clúster `dev` de Floci, Prefect se ejecutó con una copia temporal de `local.toml`, con los puertos de `port-forward` a los cinco Services ([observability.md §6.1](runbooks/observability.md#61-contra-el-clúster-dev-de-floci)).
+- **Resultado verificado** (2026-11-19): `dev` OPERATIONAL, `test` y `prod` DOWN (sin clúster local, L-11), auditoría de SAGA de `dev` con 0 hallazgos.
+- **Pendiente:** un `config/k8s.toml` versionado, o un despliegue de Prefect dentro del clúster que use los Services internos. No hay un Prefect desplegado en Kubernetes.
+
+## L-19 · Arranque intermitente de k3s en los runners de GitHub
+
+- **Comportamiento observado** (despliegue de `prod`, 2026-11-17): en dos intentos el contenedor `floci-aws-eks-aegisvolt-prod` terminó con `Exited (1)` y `kubectl` recibió *connection refused* en `localhost:6500`. El tercer intento pasó sin cambios en el código.
+- **Causa:** no determinada. No se reprodujo en local ni en los despliegues de `dev` y `test`.
+- **Mitigación actual:** cuando el job falla, `scripts/ci/diagnostics.sh` vuelca el estado de los contenedores (`docker ps -a`) y los logs de Floci y de los pods; después se reintenta el job.
+- **Pendiente:**
+  - agregar al diagnóstico los logs del propio contenedor k3s (`docker logs floci-aws-eks-aegisvolt-<env>`);
+  - un reintento acotado del arranque del clúster.
+
+## L-20 · Los scripts de verificación dejan `port-forward` abiertos
+
+- **Comportamiento observado:** `scripts/floci/k8s-verify.sh` y `scripts/floci/canary-demo.sh` terminan con procesos `kubectl port-forward` todavía vivos.
+- **Impacto:** puertos ocupados en una ejecución posterior. No hay impacto en los datos.
+- **Mitigación:** cerrarlos al terminar:
+
+  ```bash
+  ps -eo pid,args | awk '$2 ~ /kubectl$/ && /port-forward/ {print $1}' | xargs -r kill
+  ```
+
+  No uses `pkill -f port-forward`: el patrón puede coincidir con la propia shell que lo ejecuta.
+- **Pendiente:** un `trap` que los cierre en los dos scripts.
+
+
+## L-21 · CVE críticos de nginx en la imagen `web`, aceptados temporalmente
+
+- **Hallazgo** (job `trivy-images`, 2026-11-19, sin cambios en el código: se actualizó la base de datos de Trivy): nginx `1.30.6-r1` de `nginxinc/nginx-unprivileged:1.30-alpine` tiene CVE-2026-113425 (proxy de correo), CVE-2026-121810 (HTTP/3), CVE-2026-123007 y CVE-2026-123633 (HTTP/2). Todos son CRITICAL y están corregidos en `1.30.7-r0`.
+- **Por qué no es explotable aquí:** el binario incluye los módulos `mail`, `http_v2` y `http_v3`, pero la configuración efectiva de la imagen solo tiene `listen 8080;`. Es HTTP/1.1 plano, sin `http2`, sin `quic` y sin bloque `mail` (verificado con `grep` sobre `/etc/nginx` dentro de la imagen).
+- **Por qué no se actualizó nginx:**
+  - `apk add --upgrade nginx` instalaría el nginx de Alpine, que es otro paquete, en lugar del de nginx.org que trae la imagen base.
+  - La imagen base corregida es demasiado reciente para la regla de 14 días.
+- **Decisión:** los 4 CVE se excluyen de la puerta CRITICAL en `.trivyignore.yaml`, con justificación y vencimiento el **2026-12-19**. `trivy-images` ahora pasa `--ignorefile .trivyignore.yaml` solo a la puerta. El SARIF de Code scanning sigue mostrándolos.
+- **Pendiente:** subir el digest de la imagen base en `apps/web/Dockerfile` cuando exista una con nginx ≥ 1.30.7 publicada hace al menos 14 días, y borrar las 4 entradas.

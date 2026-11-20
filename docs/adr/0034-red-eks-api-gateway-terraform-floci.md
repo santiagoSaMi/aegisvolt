@@ -126,4 +126,4 @@ ADR-0033 ya había creado los módulos. Esta fase los completa (SG, rutas de API
 - **Negativas:**
   - En AWS hace falta instalar el AWS Load Balancer Controller y su TargetGroupBinding; en Floci lo sustituye un script.
   - Floci no permite demostrar aislamiento: SG, políticas, API PRIVATE, endpoint privado de EKS y rutas de VPCE quedan como configuración revisable.
-  - Agregar SG al NLB obligó a recrearlo, igual que en AWS. El cambio se aplicó por pasos (`-target`) para evitar un ciclo de `create_before_destroy` y un choque de nombres ([runbook](../runbooks/terraform-floci.md#6-cambios-de-red-que-recrean-recursos)).
+  - Agregar SG al NLB obligó a recrearlo, igual que en AWS. El cambio se aplicó por pasos (`-target`) para evitar un ciclo de `create_before_destroy` y un choque de nombres ([runbook](../runbooks/terraform.md#6-cambios-de-red-que-recrean-recursos)).

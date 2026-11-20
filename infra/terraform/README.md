@@ -1,6 +1,6 @@
 # Terraform
 
-Infraestructura como código ([ADR-0011](../../docs/adr/0011-terraform-workspaces-backend-s3-bootstrap.md), [ADR-0033](../../docs/adr/0033-terraform-modular-backend-s3-floci.md), [05-infraestructura-y-despliegue.md](../../docs/architecture/05-infraestructura-y-despliegue.md)). Siempre contra **Floci**, nunca contra AWS real (CLAUDE.md). Procedimientos y evidencias: [runbook](../../docs/runbooks/terraform-floci.md).
+Infraestructura como código ([ADR-0011](../../docs/adr/0011-terraform-workspaces-backend-s3-bootstrap.md), [ADR-0033](../../docs/adr/0033-terraform-modular-backend-s3-floci.md), [05-infraestructura-y-despliegue.md](../../docs/architecture/05-infraestructura-y-despliegue.md)). Siempre contra **Floci**, nunca contra AWS real (CLAUDE.md). Procedimientos y evidencias: [runbook](../../docs/runbooks/terraform.md).
 
 Versiones: Terraform **1.17.1** y provider `hashicorp/aws` **6.71.0** (fijado en cada raíz y en `.terraform.lock.hcl`).
 
