@@ -79,5 +79,5 @@ pnpm --filter @aegisvolt/energy-dispatch-service test:integration   # DynamoDB d
 
 - **Cargador simulado:** no hay hardware ni OCPP. El estado `CHARGING` se deriva de la ocupación registrada, y la telemetría la envía un cliente (p. ej. un simulador o las pruebas), no el cargador.
 - **Autorización:** el servicio es interno; el GraphQL API aplica los roles (ADR-0008).
-- **TTL de la telemetría:** el atributo `ttl` se escribe; habilitar el TTL de la tabla corresponde a Terraform (fase de IaC).
-- **Contenedor:** el Dockerfile llega en la fase de Kubernetes; las tablas de cada ambiente, en la fase de IaC.
+- **TTL de la telemetría:** el servicio escribe el atributo `ttl`, y Terraform habilita el TTL de la tabla `aegisvolt-dispatch-<env>`.
+- **Contenedor y tabla:** la imagen está en `services/energy-dispatch/Dockerfile`; las tablas de cada ambiente las crea Terraform.

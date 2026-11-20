@@ -121,4 +121,4 @@ El criterio de IaC pesa el 30 % de la evaluación. Hasta esta fase solo la obser
 
 ## Evidencia
 
-[docs/runbooks/terraform-floci.md](../runbooks/terraform-floci.md).
+[docs/runbooks/terraform.md](../runbooks/terraform.md).

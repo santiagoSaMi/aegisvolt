@@ -70,5 +70,6 @@ REQUIRE_INTEGRATION=true pnpm test:e2e                                 # 4 servi
 
 ## Limitaciones
 
-- La mutación GraphQL llega en la fase del GraphQL API; aquí el punto de entrada es `POST /v1/sagas`.
-- El Dockerfile y el CronJob de recuperación llegan en la fase de Kubernetes; la tabla de cada ambiente, en la de IaC.
+- El punto de entrada del servicio es `POST /v1/sagas`. La mutación `reserveAndActivateCharging` del GraphQL API lo invoca.
+- La recuperación la hace el worker interno del propio proceso (*lease*). `saga:recover` es un comando de operación manual: no hay un CronJob ni un Job de Kubernetes que lo ejecute.
+- La imagen está en `services/saga-orchestrator/Dockerfile`; la tabla de cada ambiente la crea Terraform.

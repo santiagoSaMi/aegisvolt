@@ -74,4 +74,4 @@ pnpm --filter @aegisvolt/billing-wallet-service test:integration   # DynamoDB de
 - **Flags:** `ENABLE_DYNAMIC_SURGE_PRICING` se lee de `aegisvolt-feature-flags-<env>` (tabla derivada de `APP_ENV`, caché de 5 s, valor seguro `false`). Un cambio se refleja en ≤ 5 s sin reiniciar ([runbook](../../docs/runbooks/feature-flags-demo.md)).
 - **Autorización:** no hay autorización por rol en recargas ni aperturas. El servicio es interno; el GraphQL API aplica los roles (ADR-0008).
 - **Verificación de fondos:** es una consulta y no retiene saldo (P-08). El débito vuelve a comprobarlo de forma atómica.
-- **Contenedor:** el Dockerfile llega en la fase de Kubernetes; la tabla de cada ambiente, en la fase de IaC.
+- **Contenedor y tabla:** la imagen está en `services/billing-wallet/Dockerfile`; la tabla de cada ambiente la crea Terraform ([ADR-0033](../../docs/adr/0033-terraform-modular-backend-s3-floci.md)).
