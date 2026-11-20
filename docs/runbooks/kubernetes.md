@@ -86,7 +86,7 @@ Para **borrar el clúster** (destructivo; solo con autorización): `aws eks dele
 
 - graphql-api se despliega como `Rollout` y el script espera a que esté `Healthy`.
 - Con `--no-wait-canary` no se espera.
-- Promoción, rollback y evidencias: [canary-demo.md](canary-demo.md).
+- Promoción, rollback y evidencias: [canary-rollback.md](canary-rollback.md).
 - Si el clúster no arranca tras reiniciar Docker, ver [L-10](../limitations.md#l-10--el-clúster-k3s-de-floci-no-arranca-si-su-contenedor-cambia-de-ip).
 
 ## 4. Troubleshooting

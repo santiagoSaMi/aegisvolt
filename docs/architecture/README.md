@@ -1,6 +1,6 @@
 # Arquitectura de AegisVolt
 
-Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final.md`](../../proyecto_final.md); cada decisión relevante tiene su ADR en [`docs/adr/`](../adr/). Las capacidades de Floci citadas aquí se verificaron con **Floci 2.4.0** el 2026-11-12 (ver [`infra/local/floci/README.md`](../../infra/local/floci/README.md) y [`docs/limitations.md`](../limitations.md)).
+Diseño de la arquitectura (escrito antes de implementar y actualizado con lo implementado; el resumen vigente está en [overview.md](overview.md)). La fuente de requisitos es [`proyecto_final.md`](../../proyecto_final.md); cada decisión relevante tiene su ADR en [`docs/adr/`](../adr/). Las capacidades de Floci citadas aquí se verificaron con **Floci 2.4.0** el 2026-11-12 (ver [`infra/local/floci/README.md`](../../infra/local/floci/README.md) y [`docs/limitations.md`](../limitations.md)).
 
 ## Resumen
 
@@ -19,6 +19,7 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 
 | # | Documento | Puntos cubiertos |
 | --- | --- | --- |
+| — | [Visión general](overview.md) | Resumen de lo implementado · diagramas de arquitectura, secuencia SAGA, despliegue y networking |
 | 01 | [Dominio, servicios, contratos y datos](01-dominio-y-servicios.md) | 1–6 · diagramas de contexto/contenedores y de componentes |
 | 02 | [SAGA](02-saga.md) | 7, 8, 9, 12 · máquina de estados · 3 diagramas de secuencia |
 | 03 | [Feature flags y seguridad](03-feature-flags-y-seguridad.md) | 10, 11 |
@@ -33,10 +34,13 @@ Diseño previo a la implementación. La fuente de requisitos es [`proyecto_final
 | — | [Runbook: demostración de la SAGA](../runbooks/saga-demo.md) | Evidencia de DynamoDB (Floci) de éxito, fallos, compensaciones y recuperación |
 | — | [Runbook: feature flags por ambiente](../runbooks/feature-flags-demo.md) | Cambio en `dev` sin redesplegar; `test` y `prod` intactos (Floci) |
 | — | [Guía de uso del GraphQL API](../graphql/README.md) | Autenticación, consultas, mutaciones, errores y límites, con ejemplos |
+| — | [Runbooks](../runbooks/) | Desarrollo local, Floci, Terraform, Kubernetes, canary y rollback, observabilidad, GitHub, instalación y troubleshooting, guía de demostración |
+| — | [Guía de sustentación](../guia-sustentacion.md) | Respuestas paso a paso al banco de preguntas (§6), con comandos y archivos |
+| — | [Trazabilidad de requisitos](../requirements-traceability.md) | Estado y evidencia de cada requisito de la especificación |
 
 ## Estructura del monorepo
 
-La estructura inicial está creada ([ADR-0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md)). Los directorios marcados con *(fase posterior)* se crean al implementar esa fase.
+Estructura implementada ([ADR-0018](../adr/0018-toolchain-monorepo-pnpm-node-typescript.md)).
 
 ```text
 apps/web                              apps/graphql-api
@@ -90,5 +94,6 @@ Los nombres de despliegue y de logs (`service`) conservan el nombre completo de 
 | [0033](../adr/0033-terraform-modular-backend-s3-floci.md) | Terraform modular, backend S3 con bloqueo nativo, workspaces y destino Floci aislado | Aceptado |
 | [0034](../adr/0034-red-eks-api-gateway-terraform-floci.md) | Red, EKS y API Gateway en Terraform: qué se despliega, por qué y qué demuestra Floci | Aceptado |
 | [0035](../adr/0035-cicd-github-actions-runners-hospedados-floci-efimero.md) | CI/CD con GitHub Actions en runners hospedados y Floci efímero | Aceptado |
+| [0036](../adr/0036-riesgos-trivy-aceptados-y-reversion-kms.md) | Riesgos de Trivy aceptados y reversión del endurecimiento con KMS | Aceptado |
 
-Las elecciones de librerías (servidor GraphQL, validación, runner de pruebas, versión exacta de Node.js LTS) se registrarán en ADR adicionales cuando se implemente cada componente, después de verificar las versiones disponibles.
+Las elecciones de librerías y versiones están registradas en los ADR 0018–0035.

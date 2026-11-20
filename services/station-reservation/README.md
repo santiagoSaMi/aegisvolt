@@ -103,5 +103,5 @@ REQUIRE_INTEGRATION=true pnpm test:integration                           # falla
 - **Flags:** `ENABLE_FAST_CHARGE_BOOST` se lee de `aegisvolt-feature-flags-<env>` (tabla derivada de `APP_ENV`, caché de 5 s, valor seguro `false`). Cambiarla no requiere reiniciar ([ADR-0025](../../docs/adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md)). Empieza activa solo en `dev`.
 - **Autenticación:** no hay autorización por rol en `PUT /v1/stations`. El servicio es interno (`ClusterIP` + NetworkPolicies) y el alta administrativa se expone a través del GraphQL API (ADR-0008).
 - **Consultas por ciudad:** usan un GSI de consistencia eventual. La disponibilidad listada puede llevar un retraso breve, pero la reserva siempre se decide con lectura consistente y escritura condicional.
-- **Tabla:** en los ambientes la crea Terraform (fase de IaC); `db:create-local-table` es solo para desarrollo.
-- **Contenedor:** el Dockerfile llega en la fase de Kubernetes.
+- **Tabla:** en los ambientes la crea Terraform; `db:create-local-table` es solo para desarrollo.
+- **Contenedor:** la imagen está en `services/station-reservation/Dockerfile`.

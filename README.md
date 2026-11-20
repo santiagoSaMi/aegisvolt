@@ -1,130 +1,211 @@
 # AegisVolt
 
-Plataforma cloud-native para la gestión de carga de flotas de vehículos eléctricos. La especificación está en [`proyecto_final.md`](proyecto_final.md) y las reglas de trabajo en [`CLAUDE.md`](CLAUDE.md).
+Plataforma cloud-native para gestionar la carga de flotas de vehículos eléctricos. Permite reservar un conector, cobrar con el saldo de la flota, activar la carga y auditar la telemetría y las transacciones, con tres ambientes aislados: `dev`, `test` y `prod`.
 
-## Estado
+- **Especificación:** [`proyecto_final.md`](proyecto_final.md).
+- **Reglas de trabajo:** [`CLAUDE.md`](CLAUDE.md).
+- **Infraestructura:** todo corre contra **Floci**, un emulador local de AWS, con credenciales ficticias. Nada se desplegó en una cuenta AWS real.
 
-| Fase | Estado |
+## Problema que resuelve
+
+Las empresas de logística que migran a vehículos eléctricos chocan con cuatro problemas:
+
+- conectores de alta potencia muy disputados;
+- cobros que quedan inconsistentes cuando un cargador falla después de cobrar;
+- poca visibilidad del consumo;
+- despliegues de software riesgosos en estaciones activas.
+
+El flujo central, **"Reservar y Activar Carga"**, atraviesa tres servicios con bases de datos propias, así que no puede usar una transacción ACID. AegisVolt lo resuelve con una **SAGA orquestada**: si el cargador falla, se reembolsa el saldo y se libera el conector. Las compensaciones son idempotentes y se recuperan tras reinicios. Además:
+
+- cada ambiente tiene sus propias feature flags, que cambian sin redesplegar;
+- las versiones nuevas se publican con despliegues canary analizados con métricas de CloudWatch.
+
+## Arquitectura
+
+```mermaid
+flowchart LR
+  web["Consola web<br/>(React)"] -->|/graphql| gql["graphql-api<br/>(Apollo, BFF)"]
+  gql --> orch["saga-orchestrator"]
+  orch --> res["station-reservation"] --> tR[("reservations-env")]
+  orch --> bil["billing-wallet"] --> tB[("billing-env")]
+  orch --> dis["energy-dispatch"] --> tD[("dispatch-env")]
+  orch --> tS[("sagas-env")]
+  gql -.-> tF[("feature-flags-env")]
+  res & bil & dis -.-> tF
+```
+
+- **Entrada:** API Gateway → VPC Link → NLB interno → Traefik → pods del clúster EKS del ambiente.
+- **Datos:** una tabla DynamoDB por servicio y por ambiente (`aegisvolt-<dominio>-<env>`). Ningún servicio accede a la tabla de otro.
+- **Observabilidad:** logs JSON con `correlation_id` → Fluent Bit → CloudWatch (`/aegisvolt/<env>/<servicio>`). Prefect audita la salud de los ambientes y la consistencia de las SAGAs.
+
+Diagramas de arquitectura, secuencia de la SAGA, despliegue y networking: [docs/architecture/overview.md](docs/architecture/overview.md).
+
+## Stack
+
+| Capa | Tecnología |
 | --- | --- |
-| Entorno local AWS con Floci | Listo. Ver [`infra/local/floci/README.md`](infra/local/floci/README.md) |
-| Diseño de arquitectura | Documentado en [`docs/architecture/`](docs/architecture/README.md), ADR 0002–0017; decisiones pendientes en [09](docs/architecture/09-analisis-especificacion.md) |
-| Estructura del monorepo | Lista ([ADR-0018](docs/adr/0018-toolchain-monorepo-pnpm-node-typescript.md), [ADR-0019](docs/adr/0019-paquetes-transversales-logger-config-contracts.md)) |
-| Modelos de dominio y contratos | Listos ([ADR-0020](docs/adr/0020-modelos-de-dominio-y-contratos-zod.md), [docs/contracts](docs/contracts/README.md)) |
-| station-reservation-service | Implementado con Express, DynamoDB y pruebas de integración en Floci ([README](services/station-reservation/README.md), [ADR-0021](docs/adr/0021-station-reservation-concurrencia-idempotencia-expiracion.md)) |
-| billing-wallet-service | Implementado con libro mayor atómico, reembolsos como operación propia y pruebas de integración en Floci ([README](services/billing-wallet/README.md), [ADR-0022](docs/adr/0022-billing-wallet-ledger-atomico-y-compensaciones.md)) |
-| graphql-api (BFF) | Apollo Server 5 sobre Express: 10 queries y 4 mutaciones, JWT de Cognito, políticas por flota y rol, errores centralizados, llamadas internas con timeouts y reintentos selectivos; flujo completo verificado contra Floci ([guía](docs/graphql/README.md), [ADR-0026](docs/adr/0026-graphql-api-apollo-bff-autenticacion-resiliencia.md)) |
-| Feature flags por ambiente | Tabla por ambiente derivada de `APP_ENV`; `GetFeatureFlags` y `UpdateFeatureFlag` (solo administradores, versión condicional y auditoría) en el graphql-api; los tres servicios leen sin redesplegar ([ADR-0025](docs/adr/0025-feature-flags-por-ambiente-catalogo-escritura-auditada.md), [runbook](docs/runbooks/feature-flags-demo.md)) |
-| saga-orchestrator-service | SAGA `ReserveAndActivateCharging` orquestada, con persistencia antes y después de cada paso, lease, compensaciones verificadas y recuperación; E2E con los cuatro servicios reales en Floci ([README](services/saga-orchestrator/README.md), [ADR-0024](docs/adr/0024-saga-orquestada-implementacion-estados-lease-recuperacion.md), [runbook](docs/runbooks/saga-demo.md)) |
-| Consola web (`apps/web`) | React 19 + Apollo Client 4: dashboard, estaciones, carga con progreso de la SAGA, transacciones, flags y observabilidad; login con Cognito, ambiente del despliegue y polling configurable; E2E en Chromium real contra Floci ([README](apps/web/README.md), [ADR-0027](docs/adr/0027-consola-web-react-apollo-auth-config-runtime.md), [runbook](docs/runbooks/web-console-demo.md)) |
-| Observabilidad · A. Logging | JSON estructurado en los cinco procesos con `timestamp`, `level`, `environment`, `service_name`, `correlation_id`, `saga_id`, `operation`, `message` y `error` tipado; `correlation_id` por cabeceras HTTP; redacción de secretos y datos personales; traza de una SAGA fallida verificada en E2E ([ADR-0028](docs/adr/0028-logging-estructurado-operation-errores-tipados.md)) |
-| Observabilidad · B. CloudWatch | Fluent Bit 5.1.5 (DaemonSet) → `/aegisvolt/<env>/<servicio>`; log groups, metric filters (SAGA completadas, compensadas, fallidas, duración; errores y 5xx por servicio), alarmas y dashboard en Terraform (workspaces `dev`/`test`/`prod`); operaciones de CloudWatch en Floci 2.4.0 verificadas y recolección probada de punta a punta en el EKS de Floci ([ADR-0029](docs/adr/0029-cloudwatch-fluent-bit-log-groups-metricas.md), [runbook](docs/runbooks/cloudwatch-demo.md)) |
-| Observabilidad · C. Prefect | Proyecto Python independiente (`prefect/`, Prefect 3.9.0): `environment_health_monitor` y auditorías de SAGA, reservas y billing con reglas puras citadas en cada hallazgo; solo lectura por las APIs (nuevo `GET /v1/audit/sagas` en el orquestador); 25 pruebas con fixtures; verificado contra el stack real con dashboard ([README](prefect/README.md), [ADR-0030](docs/adr/0030-prefect-auditoria-solo-lectura-por-apis.md)) |
-| Contenedores y Kubernetes | Seis imágenes (multi-stage, base fijada por digest, no root, etiqueta `sha-<commit>`); docker compose integrado con Floci; Kustomize base + overlays `dev`/`test`/`prod` con probes, security contexts, ServiceAccounts y NetworkPolicies; desplegado y operado en el EKS (k3s) de Floci con SAGA real y logs en CloudWatch ([ADR-0031](docs/adr/0031-contenedores-kubernetes-floci.md), [runbook](docs/runbooks/k8s-floci.md)) |
-| Infraestructura como código | Terraform 1.17.1 + provider AWS 6.71.0: `bootstrap` (bucket de estado versionado, cifrado, privado; estado migrado a S3), `global` (ECR) y `live` con workspaces `dev`/`test`/`prod` y módulos `network`, `dynamodb-table`, `iam` (Pod Identity), `eks`, `api-gateway`, `cloudwatch` y `ecr`; bloqueo nativo `use_lockfile`; destino Floci aislado (sin `~/.aws`, endpoints y cuenta validados); recursos previos adoptados sin pérdida; evidencias de separación de estados, versiones y lock ([ADR-0033](docs/adr/0033-terraform-modular-backend-s3-floci.md), [runbook](docs/runbooks/terraform-floci.md)) |
-| Red, EKS y API Gateway | VPC por ambiente (subredes públicas y privadas, IGW, NAT, rutas), SG mínimos, VPCE con consumidor justificado; EKS en subredes privadas con kubeconfig de Terraform; GraphQL por HTTPS en API Gateway → VPC Link → NLB interno → Traefik, verificado de punta a punta en Floci; separación explícita entre lo funcional y los metadatos del emulador ([ADR-0034](docs/adr/0034-red-eks-api-gateway-terraform-floci.md), [04-networking](docs/architecture/04-networking.md)) |
-| CI/CD (GitHub Actions) | `ci` (12 checks con gate `ci-result`, Floci temporal para integración y E2E), `terraform-plan` (estado reconstruido desde la rama destino, nunca apply), `deploy-floci` (ambiente temporal: plan regenerado + apply, imágenes `sha-<commit>`, verificación de punta a punta), `canary-deployment` (Argo decide promoción o rollback) y `security` (dependency review, audit, Gitleaks, CodeQL, Trivy); solo runners hospedados y Actions fijadas por SHA. CI, plan, seguridad y despliegue verificados en GitHub; canary pendiente de una ejecución completa en el runner ([ADR-0035](docs/adr/0035-cicd-github-actions-runners-hospedados-floci-efimero.md), [configuración manual](docs/runbooks/github-repository-settings.md)) |
-| Canary deployment | graphql-api con Argo Rollouts v1.10.1 y reparto por peso en Traefik v3.7.16 (80/20 → 50/50 → 100 %); `AnalysisTemplate` con disponibilidad (≥ 11/12 sondeos) y tasa de error ≤ 2 % con ≥ 30 operaciones, leída del CloudWatch de Floci por el proveedor nativo de Argo; promoción, rollback inducido y pausa por muestra insuficiente demostrados con tráfico medido por respuesta ([ADR-0032](docs/adr/0032-canary-argo-rollouts-traefik-cloudwatch.md), [runbook](docs/runbooks/canary-demo.md)) |
-| energy-dispatch-service | Implementado con puerto `ChargerAdapter`, cargador simulado, falla inducida por flag desde la tabla de flags del ambiente, telemetría y pruebas de integración en Floci ([README](services/energy-dispatch/README.md), [ADR-0023](docs/adr/0023-energy-dispatch-cargador-simulado-flags-y-telemetria.md)) |
+| Lenguaje | TypeScript estricto sobre Node.js 26. Python 3.12 solo para Prefect |
+| Frontend | React 19, Apollo Client 4, Vite |
+| API | Apollo Server 5 sobre Express, esquema único (14 queries y 4 mutaciones), JWT de Cognito |
+| Microservicios | Express con arquitectura hexagonal; validación con zod; logs con pino |
+| Persistencia | Amazon DynamoDB (AWS SDK v3), escrituras condicionales y transacciones |
+| SAGA | Orquestada, con estados persistidos, *lease* y recuperación |
+| Feature flags | Tabla DynamoDB por ambiente, escritura auditada |
+| Contenedores | Docker multi-stage, base fijada por digest, usuario no root, etiqueta `sha-<commit>` |
+| Kubernetes | Kustomize (base y overlays por ambiente), NetworkPolicies, Pod Security `restricted` |
+| Canary | Argo Rollouts v1.10.1 + Traefik v3.7.16 + análisis en CloudWatch |
+| IaC | Terraform 1.17.1, provider AWS 6.71.0, backend S3 versionado con `use_lockfile`, workspaces `dev`/`test`/`prod` |
+| Emulación | Floci 2.4.0 (S3, DynamoDB, CloudWatch, API Gateway, ELBv2, EC2/VPC, IAM, Cognito, ECR, EKS como k3s) |
+| Observabilidad | CloudWatch Logs y Metrics, Fluent Bit 5.1.5, Prefect 3.9.0 |
+| CI/CD | GitHub Actions en runners hospedados, con Floci temporal por ejecución |
+| Pruebas | Vitest (unitarias e integración), E2E con los procesos reales y Chromium, pytest |
+
+Las decisiones y sus motivos están en los [ADR](docs/adr/), indexados en [docs/architecture/README.md](docs/architecture/README.md#índice-de-adr).
 
 ## Requisitos
 
-| Herramienta | Versión | Instalación |
+| Herramienta | Versión | Para qué |
 | --- | --- | --- |
-| Node.js | 26 LTS (fijada en `.nvmrc`) | `nvm install && nvm use` en la raíz del repo |
-| pnpm | 12.18.0 (`packageManager`) | `npm install -g pnpm@12.18.0`. Node 26 ya no incluye corepack |
-| Docker, AWS CLI, Terraform, kubectl, jq | ver [Floci](infra/local/floci/README.md#requisitos) | Solo para infraestructura local |
+| Node.js | 26 (`.nvmrc`) | Todo el código TypeScript |
+| pnpm | 12.18.0 (`packageManager`) | Monorepo |
+| Docker Engine + Compose v2 | ≥ 23 (verificado 29.9.3) | Floci, imágenes y k3s |
+| AWS CLI v2, Terraform 1.17.1, kubectl, jq | ver la guía de instalación | Infraestructura local |
+| Python | 3.12 con `venv` | Prefect |
 
-`pnpm-workspace.yaml` tiene `engineStrict: true`: la instalación falla con una versión de Node distinta de la 26.
+- `pnpm-workspace.yaml` tiene `engineStrict: true`: la instalación falla con otra versión de Node.
+- Un clúster k3s ocupa ~1,3 GB de RAM.
 
-## Primeros pasos
+Instalación detallada y problemas frecuentes: [docs/runbooks/installation-troubleshooting.md](docs/runbooks/installation-troubleshooting.md).
 
-```bash
-nvm use                       # Node 26
-pnpm install                  # instala todo el workspace (lockfile incluido)
-pnpm check                    # formato + lint + typecheck + pruebas + build (lo mismo que verificará CI)
-```
-
-## Comandos raíz
-
-| Comando | Qué hace |
-| --- | --- |
-| `pnpm build` | Compila todos los paquetes en orden topológico (`tsc` en Node, `vite build` en la web) |
-| `pnpm typecheck` | Compila `packages/*` y ejecuta `tsc --noEmit` en cada proyecto |
-| `pnpm test` | Ejecuta las pruebas de todos los proyectos con Vitest (sin dependencias externas) |
-| `pnpm test:integration` | Pruebas de integración contra Floci (`scripts/floci/start.sh` antes). Se omiten si Floci no responde, salvo con `REQUIRE_INTEGRATION=true` |
-| `pnpm test:e2e` | E2E de la SAGA: levanta los cuatro servicios contra Floci y guarda la evidencia de DynamoDB en `tests/e2e/.evidence/` |
-| `pnpm lint` | ESLint con reglas de tipos (`--max-warnings=0`) + dependency-cruiser (ciclos, capas y límites entre servicios) |
-| `pnpm lint:code` / `pnpm lint:deps` | Cada una de las dos partes de `lint` por separado |
-| `pnpm format` / `pnpm format:check` | Aplica o verifica Prettier (el Markdown queda excluido para preservar la documentación) |
-| `pnpm check` | Todo lo anterior en secuencia |
-| `pnpm dev` | Arranca en paralelo todas las apps y servicios en modo desarrollo |
-| `pnpm clean` | Elimina `dist/` y `coverage/` |
-
-## Trabajar con una sola unidad
+## Instalación local
 
 ```bash
-pnpm --filter @aegisvolt/billing-wallet-service test
-pnpm --filter @aegisvolt/billing-wallet-service dev         # Node 26 ejecuta src/main.ts directamente (--watch)
-pnpm --filter @aegisvolt/web dev                             # Vite en http://localhost:5173 (proxy /graphql → :4000, /auth/cognito → Floci)
-pnpm --filter "./services/**" build                          # solo los microservicios
-
-# Paquete desplegable aislado (solo dist + dependencias de producción), base de la imagen Docker
-pnpm --filter @aegisvolt/billing-wallet-service deploy --prod /tmp/billing-wallet
+nvm install && nvm use
+npm install -g pnpm@12.18.0
+pnpm install
+pnpm check            # formato + lint + typecheck + pruebas unitarias + build
 ```
 
-Cada app o servicio tiene un `.env.example`. Para usarlo, cópialo a `.env` (ignorado por Git). Los valores son ficticios y solo locales.
+## Iniciar Floci
 
-Si modificas un paquete de `packages/*` y lo consume una app en modo `dev`, recompílalo con `pnpm build:packages`.
+```bash
+scripts/floci/start.sh          # Floci 2.4.0 en http://localhost:4566 (solo loopback, datos persistentes)
+scripts/floci/status.sh
+scripts/floci/smoke-test.sh     # S3, DynamoDB, Logs, API Gateway, VPC/VPCE, ECR
+scripts/floci/stop.sh           # detiene sin borrar datos
+```
 
-## Estructura
+Los scripts cargan credenciales ficticias (`test`/`test`), ignoran `~/.aws` y abortan si el endpoint no es local. Runbook: [docs/runbooks/floci.md](docs/runbooks/floci.md).
 
-| Ruta | Paquete | Puerto | Responsabilidad |
+## Ejecutar los servicios
+
+Hay cuatro modos ([docs/runbooks/local-development.md](docs/runbooks/local-development.md)):
+
+```bash
+# A. Procesos Node con recarga (tablas *-local en Floci)
+scripts/floci/bootstrap-env.sh local && pnpm dev
+
+# B. Stack de demostración con datos (consola en http://127.0.0.1:24105)
+pnpm --filter @aegisvolt/e2e-tests demo:web
+
+# C. Imágenes reales con docker compose (consola en http://127.0.0.1:8080)
+scripts/local/compose.sh up && scripts/local/compose.sh seed
+
+# D. Ambiente dev en el EKS (k3s) de Floci, con la infraestructura de Terraform
+scripts/floci/terraform-bootstrap.sh apply && scripts/floci/terraform-global.sh apply
+scripts/floci/terraform-live.sh dev apply
+scripts/floci/k8s-deploy.sh dev && scripts/floci/k8s-verify.sh dev
+```
+
+| Ruta | Paquete | Puerto local | Responsabilidad |
 | --- | --- | --- | --- |
-| `apps/web` | `@aegisvolt/web` | 5173 | SPA React (ADR-0017) |
-| `apps/graphql-api` | `@aegisvolt/graphql-api` | 4000 | BFF GraphQL ([README](apps/graphql-api/README.md), [guía](docs/graphql/README.md)) |
-| `services/saga-orchestrator` | `@aegisvolt/saga-orchestrator-service` | 4100 | Orquestador de la SAGA (ADR-0002) |
-| `services/station-reservation` | `@aegisvolt/station-reservation-service` | 4101 | Reservas de conectores |
-| `services/billing-wallet` | `@aegisvolt/billing-wallet-service` | 4102 | Billeteras y cobros |
+| `apps/web` | `@aegisvolt/web` | 5173 | Consola (SPA) |
+| `apps/graphql-api` | `@aegisvolt/graphql-api` | 4000 | BFF GraphQL ([guía](docs/graphql/README.md)) |
+| `services/saga-orchestrator` | `@aegisvolt/saga-orchestrator-service` | 4100 | Orquestador de la SAGA |
+| `services/station-reservation` | `@aegisvolt/station-reservation-service` | 4101 | Estaciones, conectores y reservas |
+| `services/billing-wallet` | `@aegisvolt/billing-wallet-service` | 4102 | Billeteras, débitos y reembolsos |
 | `services/energy-dispatch` | `@aegisvolt/energy-dispatch-service` | 4103 | Activación del cargador y telemetría |
-| `packages/contracts` | `@aegisvolt/contracts` | — | Cabeceras HTTP, `problem+json`, OpenAPI |
-| `packages/logger` | `@aegisvolt/logger` | — | Logger JSON con `correlation_id`/`saga_id` |
-| `packages/config` | `@aegisvolt/config` | — | Configuración validada por entorno |
-| `packages/feature-flags` | `@aegisvolt/feature-flags` | — | Catálogo de flags, tabla por ambiente y lector DynamoDB con caché (ADR-0007, ADR-0025) |
-| `prefect/` | — | — | Flujos de observabilidad (Python, fase posterior) |
-| `tests/e2e/` | `@aegisvolt/e2e-tests` | — | E2E con los cinco procesos reales y Cognito contra Floci (SAGA y GraphQL) |
+| `packages/{contracts,logger,config,feature-flags}` | `@aegisvolt/*` | — | Contratos HTTP, logger JSON, configuración validada y lector de flags |
+| `prefect/` | — | — | Flujos de salud y auditoría (Python, [README](prefect/README.md)) |
+| `tests/e2e/` | `@aegisvolt/e2e-tests` | — | E2E con los procesos reales contra Floci |
 | `infra/` | — | — | Floci local, Terraform y Kubernetes |
-| `scripts/` | — | — | Scripts operativos (Floci, `flags/set.sh` para flags locales) |
 | `.github/workflows/` | — | — | CI/CD ([README](.github/workflows/README.md)) |
 
-**Estructura interna de cada servicio** (hexagonal; dependency-cruiser la hace cumplir):
+Cada servicio sigue la estructura hexagonal `domain/ → application/ → infrastructure/ + presentation/`, con `main.ts` como *composition root*. dependency-cruiser la hace cumplir (`pnpm lint:deps`), e impide que un servicio importe código de otro.
 
-```text
-src/
-  domain/          # sin dependencias externas ni de otras capas
-  application/     # casos de uso y puertos; no conoce adaptadores
-  infrastructure/  # adaptadores de salida (DynamoDB, HTTP clients…)
-  presentation/    # adaptadores de entrada (HTTP)
-  config.ts        # configuración validada
-  main.ts          # composition root
-test/
-```
+## Frontend
 
-Ningún servicio importa código de otro: se comunican por HTTP con los contratos de `packages/contracts`.
+La consola (`apps/web`) solo habla con `/graphql`, en el mismo origen. Tiene seis vistas:
 
-## Entorno local (Floci)
+- dashboard;
+- estaciones y conectores;
+- **Carga**, que dispara la SAGA y muestra su progreso;
+- transacciones;
+- feature flags del ambiente (los administradores pueden cambiarlas);
+- observabilidad (eventos de la SAGA y `correlation_id`).
+
+El login es con Cognito y el ambiente lo informa el backend. Detalle: [apps/web/README.md](apps/web/README.md) y [docs/runbooks/web-console-demo.md](docs/runbooks/web-console-demo.md).
 
 ```bash
-scripts/floci/start.sh                 # inicia Floci 2.4.0 en http://localhost:4566 (persistente)
-scripts/floci/smoke-test.sh            # verifica S3, DynamoDB, Logs, API Gateway, VPC/VPCE, ECR
-scripts/floci/smoke-test.sh --with-eks # + EKS (k3s)
-scripts/floci/terraform-check.sh       # verifica Terraform (provider + backend S3) contra Floci
-scripts/floci/stop.sh                  # detiene sin borrar datos
+pnpm --filter @aegisvolt/web dev      # http://localhost:5173 (proxy /graphql → :4000, /auth/cognito → Floci)
 ```
 
-Todo el desarrollo apunta a Floci con credenciales ficticias. **Nunca** se aprovisiona en una cuenta AWS real.
+## Pruebas
+
+| Comando | Qué cubre |
+| --- | --- |
+| `pnpm test` | Unitarias: dominio, casos de uso, compensaciones de la SAGA y resolvers |
+| `REQUIRE_INTEGRATION=true pnpm test:integration` | DynamoDB real en Floci y GraphQL, incluido el aislamiento de flags por ambiente |
+| `REQUIRE_INTEGRATION=true pnpm test:e2e` | SAGA con los procesos reales (éxito, fondos insuficientes, falla de hardware, compensación repetida, reinicios), GraphQL con Cognito y consola en Chromium. Evidencia en `tests/e2e/.evidence/` |
+| `cd prefect && .venv/bin/pytest` | Reglas y flows de Prefect |
+| `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm format:check` | Calidad estática y compilación |
+| `pnpm check` | Formato, lint, typecheck, unitarias y build en secuencia |
+
+Sin `REQUIRE_INTEGRATION=true`, las pruebas de integración y E2E se omiten si Floci no responde.
+
+**Resultados de la última auditoría** (2026-11-19, commit `4e6e269`, todos correctos):
+
+- 554 pruebas unitarias, 46 de integración, 19 E2E y 25 de Prefect;
+- 6 imágenes construidas;
+- planes de Terraform sin cambios en los 5 estados;
+- verificaciones de Kubernetes, 17/17;
+- verificación de red, 29/29.
+
+No se publican métricas de cobertura. Detalle: [docs/requirements-traceability.md](docs/requirements-traceability.md).
+
+## Lo que está emulado
+
+Floci ejecuta de verdad S3 (versionado y lock del estado), DynamoDB, CloudWatch Logs y metric filters, API Gateway → VPC Link → NLB → k3s, Cognito, ECR y un k3s por clúster EKS.
+
+Solo guarda como **metadatos**, sin aplicarlos:
+
+- el enrutamiento y el filtrado de VPC, subredes, rutas, security groups y VPC Endpoints;
+- el aislamiento de la API Gateway PRIVATE;
+- el endpoint privado de EKS;
+- las políticas IAM.
+
+Localmente solo `dev` tiene clúster, por memoria. Cada limitación y su forma verificable de cumplir el objetivo está en [docs/limitations.md](docs/limitations.md).
 
 ## Documentación
 
-- [Arquitectura](docs/architecture/README.md)
-- [ADR](docs/adr/)
-- [Limitaciones conocidas del entorno local](docs/limitations.md)
+| Documento | Contenido |
+| --- | --- |
+| [Visión general](docs/architecture/overview.md) | Componentes y diagramas Mermaid de arquitectura, SAGA, despliegue y networking |
+| [Arquitectura detallada](docs/architecture/README.md) | Dominio, SAGA, flags, red, infraestructura, observabilidad, CI/CD, pruebas e índice de ADR |
+| [ADR](docs/adr/) | 36 decisiones numeradas |
+| [Trazabilidad de requisitos](docs/requirements-traceability.md) | Estado y evidencia de cada requisito |
+| [Guía de sustentación](docs/guia-sustentacion.md) | Respuesta paso a paso a cada pregunta del banco (§6), con comandos y archivos |
+| [Limitaciones](docs/limitations.md) | Qué no emula Floci y cómo se cumple de forma verificable |
+| [Contratos](docs/contracts/README.md) y [GraphQL](docs/graphql/README.md) | Contratos HTTP entre servicios y uso del API |
+| **Runbooks** | |
+| [Desarrollo local](docs/runbooks/local-development.md) | Los cuatro modos de ejecución y las pruebas |
+| [Instalación y troubleshooting](docs/runbooks/installation-troubleshooting.md) | Herramientas y problemas frecuentes |
+| [Floci](docs/runbooks/floci.md) | Operación del emulador y qué emula |
+| [Terraform](docs/runbooks/terraform.md) | Bootstrap, workspaces, evidencias, versiones y restauración del estado |
+| [Kubernetes](docs/runbooks/kubernetes.md) | Imágenes, compose, despliegue y operación del clúster |
+| [Canary y rollback](docs/runbooks/canary-rollback.md) | Promoción, rollback inducido y muestra insuficiente |
+| [Observabilidad](docs/runbooks/observability.md) | CloudWatch por `correlation_id`, métricas, alarmas y Prefect |
+| [Configuración de GitHub](docs/runbooks/github-repository-settings.md) | Rulesets, environments, Actions y seguridad (manual) |
+| [SAGA](docs/runbooks/saga-demo.md), [feature flags](docs/runbooks/feature-flags-demo.md) y [consola web](docs/runbooks/web-console-demo.md) | Demostraciones con evidencia de DynamoDB |
+| [Guía de demostración](docs/runbooks/demo.md) | Guion de 20 minutos por capas |
+| [Floci: referencia](infra/local/floci/README.md) | Versiones, matriz de servicios verificada |

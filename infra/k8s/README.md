@@ -1,6 +1,6 @@
 # Kubernetes
 
-Manifiestos Kustomize ([ADR-0012](../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md), [ADR-0031](../../docs/adr/0031-contenedores-kubernetes-floci.md)). Despliegue, inspección y troubleshooting: [runbook](../../docs/runbooks/k8s-floci.md).
+Manifiestos Kustomize ([ADR-0012](../../docs/adr/0012-eks-cluster-por-ambiente-kustomize-acceso-floci.md), [ADR-0031](../../docs/adr/0031-contenedores-kubernetes-floci.md)). Despliegue, inspección y troubleshooting: [runbook](../../docs/runbooks/kubernetes.md).
 
 | Directorio | Contenido |
 | --- | --- |
@@ -18,7 +18,7 @@ Unidades: `station-reservation-service`, `billing-wallet-service`, `energy-dispa
 - **Imágenes:** no se fijan en Git. `scripts/floci/k8s-deploy.sh` genera una kustomization con `images` (ECR de Floci, `sha-<commit>`) sobre el overlay.
 - **Identidad del ambiente:** el ConfigMap `aegisvolt-identity` (emisor, JWKS y app client de Cognito) lo publica el despliegue; en AWS real, Terraform.
 - **Etiquetas obligatorias de cada workload:** `app.kubernetes.io/part-of: aegisvolt` y `app.kubernetes.io/name: <service_name>`, de las que dependen los log groups y las NetworkPolicies.
-- **Canary:** solo graphql-api, que recibe el tráfico externo, se despliega con Argo Rollouts y reparto por peso en Traefik. El resto usa `RollingUpdate`, que no es canary. El despliegue etiqueta la plantilla con `version=<etiqueta>`, que se devuelve en `x-service-version`. Demostración: [runbook](../../docs/runbooks/canary-demo.md).
+- **Canary:** solo graphql-api, que recibe el tráfico externo, se despliega con Argo Rollouts y reparto por peso en Traefik. El resto usa `RollingUpdate`, que no es canary. El despliegue etiqueta la plantilla con `version=<etiqueta>`, que se devuelve en `x-service-version`. Demostración: [runbook](../../docs/runbooks/canary-rollback.md).
 
 ```bash
 kubectl kustomize infra/k8s/overlays/dev       # renderizar

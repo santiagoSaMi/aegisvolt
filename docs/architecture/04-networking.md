@@ -43,7 +43,7 @@ Implementada en `infra/terraform/modules/{network,eks,api-gateway}` ([ADR-0034](
 ### Recorrido de un paquete (pregunta §6.1)
 
 1. El navegador resuelve el endpoint regional de API Gateway y envía `POST /graphql` (HTTPS).
-2. API Gateway aplica el *Cognito authorizer* y el *throttling*, y la integración `HTTP_PROXY` con `connectionType=VPC_LINK` envía la petición por las ENIs del VPC Link en las subredes privadas.
+2. API Gateway aplica el *throttling* del stage (el JWT de Cognito lo valida graphql-api: no hay *Cognito authorizer* mientras Cognito siga fuera de Terraform, L-13), y la integración `HTTP_PROXY` con `connectionType=VPC_LINK` envía la petición por las ENIs del VPC Link en las subredes privadas.
 3. El **NLB interno** la reenvía a su *target group* `ip`: las IPs de los pods de **Traefik** (registradas por el AWS Load Balancer Controller). Interviene el SG del NLB (egreso al puerto 8000 de las subredes privadas) y el SG del clúster (entrada desde el SG del NLB).
 4. Traefik aplica la `IngressRoute` (`/graphql` → `TraefikService` del canary, ADR-0032) y entrega al Service `graphql-api`, que kube-proxy resuelve a un pod.
 5. El pod llama al orquestador por el Service `ClusterIP`, filtrado por las NetworkPolicies.
