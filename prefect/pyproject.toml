@@ -13,7 +13,7 @@ dependencies = [
   "prefect==3.9.0",
   "boto3==1.43.118",
   # boto3 admite cualquier botocore 1.43.x: se fija para respetar la antigüedad mínima.
-  "botocore==1.43.118",
+  "botocore==1.43.126",
 ]
 
 [project.optional-dependencies]
