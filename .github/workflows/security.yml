@@ -113,12 +113,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:${{ matrix.language }}
           upload: ${{ env.CAN_UPLOAD == 'true' && 'always' || 'never' }}
@@ -145,7 +145,7 @@ jobs:
           "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format sarif --output "${RUNNER_TEMP}/trivy-config.sarif" .
           { echo '## Trivy config (HIGH, CRITICAL)'; echo '```'; "${RUNNER_TEMP}/trivy" config "${skip[@]}" --severity HIGH,CRITICAL --format table .; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - if: env.CAN_UPLOAD == 'true'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/trivy-config.sarif
           category: trivy-config
@@ -189,37 +189,37 @@ jobs:
       # ejecuciones SARIF en una misma categoría (changelog 2025-07-21).
       - name: SARIF web
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/web.sarif
           category: trivy-images/web
       - name: SARIF graphql-api
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/graphql-api.sarif
           category: trivy-images/graphql-api
       - name: SARIF station-reservation
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/station-reservation.sarif
           category: trivy-images/station-reservation
       - name: SARIF billing-wallet
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/billing-wallet.sarif
           category: trivy-images/billing-wallet
       - name: SARIF energy-dispatch
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/energy-dispatch.sarif
           category: trivy-images/energy-dispatch
       - name: SARIF saga-orchestrator
         if: always() && env.CAN_UPLOAD == 'true' && steps.scan.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: ${{ runner.temp }}/sarif/saga-orchestrator.sarif
           category: trivy-images/saga-orchestrator
